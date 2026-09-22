@@ -1,7 +1,7 @@
 /**
  * dashboard.js - Real-Time SecOps Polling & UI Interaction
- * Pure Blue, Black, and White Design System | Zero Borders
- * AI-Powered Network Threat Detection System
+ * Pure Sky Blue & Crisp White Light Design System | Zero Borders
+ * Impeccable Design Quality & Ergonomics
  */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -24,35 +24,39 @@ document.addEventListener("DOMContentLoaded", () => {
   let lastAlertIds = new Set();
   let lastFlowId = 0;
 
-  // Severity styling map strictly using Blue, Black, and White (Zero Borders)
+  // Severity styling map strictly using Sky Blue, White, and Slate (Zero Borders)
   const severityStyles = {
     CRITICAL: {
-      card: "bg-blue-600 text-white shadow-lg",
-      badge: "bg-black text-white font-black",
-      ipText: "text-white",
-      metaText: "text-blue-100",
-      descText: "text-white"
+      card: "bg-sky-600 text-white shadow-sm",
+      badge: "bg-white text-sky-800 font-extrabold",
+      ipText: "text-white font-bold",
+      metaText: "text-sky-100",
+      descText: "text-white font-medium",
+      btn: "bg-white text-sky-800 hover:bg-sky-50 font-bold"
     },
     HIGH: {
-      card: "bg-blue-700 text-white shadow-md",
-      badge: "bg-black text-blue-200 font-bold",
-      ipText: "text-white",
-      metaText: "text-blue-100",
-      descText: "text-white"
+      card: "bg-sky-500 text-white shadow-sm",
+      badge: "bg-sky-100 text-sky-800 font-bold",
+      ipText: "text-white font-bold",
+      metaText: "text-sky-100",
+      descText: "text-white font-medium",
+      btn: "bg-white text-sky-700 hover:bg-sky-50 font-bold"
     },
     MEDIUM: {
-      card: "bg-[#0f1d3d] text-white shadow-sm",
-      badge: "bg-blue-600 text-white font-bold",
-      ipText: "text-white",
-      metaText: "text-blue-200",
-      descText: "text-blue-100"
+      card: "bg-sky-100 text-slate-800 shadow-xs",
+      badge: "bg-sky-200 text-sky-900 font-bold",
+      ipText: "text-slate-900 font-bold",
+      metaText: "text-sky-700",
+      descText: "text-slate-700 font-medium",
+      btn: "bg-sky-600 text-white hover:bg-sky-700 font-bold"
     },
     LOW: {
-      card: "bg-[#0b1630] text-blue-100 shadow-sm",
-      badge: "bg-blue-900 text-blue-200 font-semibold",
-      ipText: "text-white",
-      metaText: "text-blue-300",
-      descText: "text-blue-200"
+      card: "bg-slate-100 text-slate-800 shadow-xs",
+      badge: "bg-slate-200 text-slate-700 font-semibold",
+      ipText: "text-slate-900 font-bold",
+      metaText: "text-slate-500",
+      descText: "text-slate-600 font-medium",
+      btn: "bg-slate-800 text-white hover:bg-slate-900 font-semibold"
     }
   };
 
@@ -67,7 +71,7 @@ document.addEventListener("DOMContentLoaded", () => {
       elThreats.textContent = Number(data.malicious_threats || 0).toLocaleString();
       
       const unackCount = data.unacknowledged_alerts || 0;
-      elAlertsCount.textContent = unackCount;
+      elAlertsCount.textContent = `${unackCount} Alerts`;
       elAlertBadge.textContent = unackCount;
       
       if (data.latest_telemetry) {
@@ -101,7 +105,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const currentIds = new Set(alerts.map(a => a.alert_id));
       if (alerts.length === 0) {
         elAlertList.innerHTML = `
-          <div class="text-center py-12 text-blue-300/60 text-xs bg-[#040814] rounded-xl p-8">
+          <div class="text-center py-12 text-slate-400 text-xs bg-sky-50/60 rounded-xl p-8">
             No unacknowledged security threats. Perimeter secure.
           </div>`;
         lastAlertIds.clear();
@@ -121,13 +125,13 @@ document.addEventListener("DOMContentLoaded", () => {
               <div class="space-y-1">
                 <div class="flex flex-wrap items-center gap-2 text-xs">
                   <span class="px-2.5 py-0.5 rounded text-[10px] uppercase tracking-wider ${style.badge}">${a.severity}</span>
-                  <span class="font-mono font-semibold ${style.ipText}">${a.src_ip} &rarr; ${a.dst_ip}</span>
+                  <span class="font-mono ${style.ipText}">${a.src_ip} &rarr; ${a.dst_ip}</span>
                   <span class="font-mono text-[11px] ${style.metaText}">(${a.protocol})</span>
                   <span class="text-[11px] font-medium ${style.metaText}">Confidence: ${(a.confidence * 100).toFixed(1)}%</span>
                 </div>
-                <p class="text-xs sm:text-sm font-medium ${style.descText}">${a.message}</p>
+                <p class="text-xs sm:text-sm ${style.descText}">${a.message}</p>
               </div>
-              <button class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-white text-black hover:bg-blue-400 hover:text-black transition-all duration-150 shrink-0 cursor-pointer shadow-md active:scale-95" data-id="${a.alert_id}" onclick="handleAcknowledge(${a.alert_id})">
+              <button class="px-3.5 py-1.5 rounded-lg text-xs transition-all duration-150 shrink-0 cursor-pointer shadow-xs active:scale-95 ${style.btn}" data-id="${a.alert_id}" onclick="handleAcknowledge(${a.alert_id})">
                 Acknowledge
               </button>
             </div>
@@ -147,7 +151,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const detections = data.detections || [];
       
       if (detections.length === 0) {
-        elStreamBody.innerHTML = `<tr><td colspan="8" class="text-center py-10 text-blue-300/60 font-sans text-xs">Awaiting streaming flow input...</td></tr>`;
+        elStreamBody.innerHTML = `<tr><td colspan="8" class="text-center py-10 text-slate-400 font-sans text-xs">Awaiting streaming flow input...</td></tr>`;
         return;
       }
       
@@ -159,25 +163,25 @@ document.addEventListener("DOMContentLoaded", () => {
       elStreamBody.innerHTML = detections.map(d => {
         const isMalicious = d.predicted_class === 1;
         const pillStyle = isMalicious 
-          ? "bg-blue-600 text-white font-bold"
-          : "bg-[#0c162e] text-blue-200 font-semibold";
+          ? "bg-sky-600 text-white font-bold"
+          : "bg-sky-100 text-sky-800 font-semibold";
         const pillText = isMalicious ? "MALICIOUS" : "BENIGN";
         const timeStr = d.timestamp.split("T")[1]?.slice(0, 8) || d.timestamp;
         
         return `
-          <tr class="hover:bg-[#0c162e] transition-colors duration-150">
-            <td class="px-3 py-2 font-bold text-white">#${d.window_sequence_id}</td>
-            <td class="px-3 py-2 text-blue-300 font-mono text-[11px]">${timeStr}</td>
-            <td class="px-3 py-2 text-blue-100 font-mono">${d.src_ip}</td>
-            <td class="px-3 py-2 text-blue-100 font-mono">${d.dst_ip}</td>
-            <td class="px-3 py-2 text-blue-300 font-semibold">${d.protocol}</td>
-            <td class="px-3 py-2">
-              <span class="px-2.5 py-0.5 rounded-full text-[10px] tracking-wider uppercase ${pillStyle}">
+          <tr class="hover:bg-sky-50 transition-colors duration-150">
+            <td class="px-2.5 py-2 font-bold text-slate-900">#${d.window_sequence_id}</td>
+            <td class="px-2 py-2 text-slate-500 font-mono text-[11px]">${timeStr}</td>
+            <td class="px-2.5 py-2 text-slate-700 font-mono font-medium">${d.src_ip}</td>
+            <td class="px-2.5 py-2 text-slate-700 font-mono font-medium">${d.dst_ip}</td>
+            <td class="px-2 py-2 text-slate-500 font-semibold">${d.protocol}</td>
+            <td class="px-2.5 py-2">
+              <span class="px-2 py-0.5 rounded-full text-[10px] tracking-wider uppercase ${pillStyle}">
                 ${pillText}
               </span>
             </td>
-            <td class="px-3 py-2 text-white tabular-nums">${(d.confidence * 100).toFixed(1)}%</td>
-            <td class="px-3 py-2 text-blue-400 font-mono tabular-nums">${d.inference_latency_ms.toFixed(3)} ms</td>
+            <td class="px-2.5 py-2 text-slate-800 font-semibold tabular-nums">${(d.confidence * 100).toFixed(1)}%</td>
+            <td class="px-2.5 py-2 text-sky-600 font-mono font-bold tabular-nums text-right">${d.inference_latency_ms.toFixed(3)} ms</td>
           </tr>
         `;
       }).join("");
