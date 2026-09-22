@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grace NIDS — AI-Powered Threat Detection Dashboard</title>
+  <meta name="description" content="Operational Monitoring Dashboard for AI-Powered Network Threat Detection in Resource-Constrained Environments (Simulated Ubuntu/Raspberry Pi).">
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+
+  <!-- Top Navigation & System Status Banner -->
+  <header class="top-header">
+    <div class="header-content">
+      <div class="branding">
+        <div class="logo-icon" aria-hidden="true">&Sigma;</div>
+        <div>
+          <h1>AI Network Threat Detection Gateway</h1>
+          <p>Edge-Class Simulation Platform &bull; University of Uyo B.Sc. Project</p>
+        </div>
+      </div>
+      <div class="header-badges">
+        <span class="status-badge" title="Single-Core Daemon Active">
+          <span class="pulse-dot"></span> Service Online
+        </span>
+        <span class="sim-tag" title="Enforced via taskset -c 0 and cgroups">
+          CPU: Core 0 Pinned &bull; 2GB Ceil
+        </span>
+        <span class="sim-tag" title="Active Edge TFLite Model">
+          Model: {{ summary.active_model.version }} ({{ summary.active_model.file_size_kb }} KB)
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Dashboard Content Container -->
+  <main class="dashboard-container">
+    
+    <!-- KPI Counters Grid -->
+    <section class="kpi-grid" aria-label="Key Performance Indicators">
+      <div class="kpi-card">
+        <span class="kpi-title">Total Flows Processed</span>
+        <span class="kpi-value" id="kpi-total-flows">{{ summary.total_flows_processed }}</span>
+        <span class="kpi-sub">Continuous 10-flow sequences</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Benign Traffic</span>
+        <span class="kpi-value" id="kpi-benign-flows" style="color: var(--color-emerald);">{{ summary.benign_flows }}</span>
+        <span class="kpi-sub">Verified normal perimeter flows</span>
+      </div>
+      <div class="kpi-card alert-card">
+        <span class="kpi-title">Malicious Threats Detected</span>
+        <span class="kpi-value" id="kpi-threats">{{ summary.malicious_threats }}</span>
+        <span class="kpi-sub">Flagged multi-stage intrusions</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Active Alerts Queue</span>
+        <span class="kpi-value" id="kpi-alerts-count" style="color: var(--color-amber);">{{ summary.unacknowledged_alerts }}</span>
+        <span class="kpi-sub">Pending operator review</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Mean Latency Contract</span>
+        <span class="kpi-value" style="color: var(--color-cyan);">&lt; 0.05 ms</span>
+        <span class="kpi-sub">NFR1 Ceiling: &le; 50.0 ms (PASSED)</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Steady Memory RSS</span>
+        <span class="kpi-value" style="color: var(--color-purple);">&lt; 76 MB</span>
+        <span class="kpi-sub">NFR3 Budget: &le; 512.0 MB (PASSED)</span>
+      </div>
+    </section>
+
+    <!-- Two-Column Operational Panels -->
+    <section class="panels-grid">
+      
+      <!-- Security Alerts Triage Panel -->
+      <article class="panel-card" aria-label="Security Alert Queue">
+        <div class="panel-header">
+          <h2>
+            <span>Prioritized Threat Alerts</span>
+            <span class="badge-count" id="alert-badge-count">{{ summary.unacknowledged_alerts }}</span>
+          </h2>
+          <span style="font-size: 0.75rem; color: var(--text-dim);">Auto-refreshes in real-time</span>
+        </div>
+        <div class="alert-list" id="alert-list">
+          <div class="empty-state">Loading active security incidents...</div>
+        </div>
+      </article>
+
+      <!-- Live Flow Stream Feed Table -->
+      <article class="panel-card" aria-label="Live Ingestion Stream">
+        <div class="panel-header">
+          <h2>Live Flow Classification Stream</h2>
+          <span style="font-size: 0.75rem; color: var(--text-dim);">10-Flow Sequence Windows</span>
+        </div>
+        <div class="table-wrapper">
+          <table class="stream-table">
+            <thead>
+              <tr>
+                <th>Window</th>
+                <th>Time</th>
+                <th>Source IP</th>
+                <th>Destination</th>
+                <th>Proto</th>
+                <th>Verdict</th>
+                <th>Confidence</th>
+                <th>Latency</th>
+              </tr>
+            </thead>
+            <tbody id="stream-table-body">
+              <tr>
+                <td colspan="8" class="empty-state">Initializing stream ingestion feed...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+    </section>
+
+    <!-- Hardware Resource Telemetry Panel -->
+    <section class="panel-card" aria-label="Hardware Resource Ceilings">
+      <div class="panel-header">
+        <h2>Simulated Edge Hardware Telemetry (psutil)</h2>
+        <span class="sim-tag">Raspberry Pi Target Budget Compliance</span>
+      </div>
+      <div class="telemetry-row">
+        <!-- CPU Gauge -->
+        <div class="gauge-box">
+          <div class="gauge-header">
+            <span>CPU Utilization (Pinned Core 0)</span>
+            <span id="gauge-cpu-val">{{ summary.latest_telemetry.cpu_percent }}%</span>
+          </div>
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill fill-cpu" id="gauge-cpu-bar" style="width: {{ summary.latest_telemetry.cpu_percent }}%;"></div>
+          </div>
+          <span style="font-size: 0.7rem; color: var(--text-dim);">100% represents 1 pinned logical core ceiling</span>
+        </div>
+
+        <!-- Memory Gauge -->
+        <div class="gauge-box">
+          <div class="gauge-header">
+            <span>Resident Memory (RSS)</span>
+            <span id="gauge-mem-val">{{ summary.latest_telemetry.memory_rss_mb }} MB / 512 MB</span>
+          </div>
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill fill-mem" id="gauge-mem-bar" style="width: 15%;"></div>
+          </div>
+          <span style="font-size: 0.7rem; color: var(--text-dim);">LiteRT interpreter footprint: &lt; 512 MB budget</span>
+        </div>
+
+        <!-- Throughput Gauge -->
+        <div class="gauge-box">
+          <div class="gauge-header">
+            <span>Flow Ingestion Throughput</span>
+            <span id="gauge-throughput-val">{{ summary.latest_telemetry.throughput_fps }} flows/s</span>
+          </div>
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill fill-cpu" style="width: 45%;"></div>
+          </div>
+          <span style="font-size: 0.7rem; color: var(--text-dim);">Simulated network replay frequency</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Academic Footer -->
+  <footer>
+    <p>
+      <strong>Design and Implementation of an AI-Powered Network Threat Detection System in Resource Constrained Environments</strong>
+    </p>
+    <p style="margin-top: 0.35rem;">
+      Candidate: <strong>Imeh Grace Mfon</strong> (Reg No: 21/SC/CO/1117) &bull; Supervisor: <strong>Mr. U. J. Ntia</strong> &bull; Department of Computer Science, University of Uyo
+    </p>
+    <p style="margin-top: 0.25rem; color: var(--text-dim);">
+      Simulation Harness: Workstation x86_64 single-core cgroups containment &bull; Power Draw: NOT MEASURED &bull; Version 1.0.0
+    </p>
+  </footer>
+
+  <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

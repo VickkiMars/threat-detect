@@ -1,0 +1,18 @@
+# Edge Runtime & Inference Engine
+ai-edge-litert>=2.2.0
+numpy>=1.26.0
+scipy>=1.10.0
+joblib>=1.3.0
+
+# Data Preprocessing & Analytics
+pandas>=2.0.0
+scikit-learn>=1.3.0
+
+# Web Dashboard & Local REST API
+flask>=3.0.0
+
+# System Telemetry & Hardware Profiling
+psutil>=5.9.0
+
+# Testing & Quality Assurance
+pytest>=7.4.0
