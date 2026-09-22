@@ -11,45 +11,43 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   
-  <!-- Tailwind CSS v4 Play Browser Runtime -->
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <link rel="stylesheet" href="/static/css/dashboard.css">
 </head>
-<body class="bg-slate-950 text-slate-100 font-sans antialiased min-h-screen flex flex-col selection:bg-cyan-500 selection:text-slate-950">
+<body class="bg-black text-white font-sans antialiased min-h-screen flex flex-col selection:bg-blue-600 selection:text-white">
 
   <!-- Top Navigation & System Status Banner -->
-  <header class="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 px-4 sm:px-6 py-3.5">
+  <header class="sticky top-0 z-50 bg-[#060b18]/95 backdrop-blur-md px-4 sm:px-6 py-3.5">
     <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
       
       <!-- Brand & Project Identity -->
       <div class="flex items-center gap-3.5">
-        <div class="size-10 bg-linear-to-br from-cyan-500 to-purple-600 rounded-xl flex items-center justify-center font-bold text-white shadow-lg shadow-cyan-500/20 text-lg shrink-0" aria-hidden="true">
+        <div class="size-10 bg-blue-600 rounded-xl flex items-center justify-center font-bold text-white text-lg shrink-0 shadow-lg" aria-hidden="true">
           &Sigma;
         </div>
         <div>
           <h1 class="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-2">
             AI Network Threat Detection Gateway
-            <span class="text-xs px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-medium">B.Sc. Research</span>
+            <span class="text-xs px-2.5 py-0.5 rounded-full bg-blue-950 text-blue-300 font-medium">B.Sc. Research</span>
           </h1>
-          <p class="text-xs text-slate-400">Edge-Class Simulation Platform &bull; Department of Computer Science, University of Uyo</p>
+          <p class="text-xs text-blue-300/60">Edge-Class Simulation Platform &bull; Department of Computer Science, University of Uyo</p>
         </div>
       </div>
 
       <!-- Live Environment Indicators -->
       <div class="flex flex-wrap items-center gap-2 sm:gap-3">
         <!-- Pulse Status Badge -->
-        <div class="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400 shadow-sm shadow-emerald-500/10">
-          <span class="size-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <div class="inline-flex items-center gap-2 rounded-full bg-blue-950 px-3 py-1 text-xs font-semibold text-blue-200">
+          <span class="size-2 rounded-full bg-blue-400 animate-pulse"></span>
           Service Online
         </div>
         
         <!-- Hardware Isolation Badge -->
-        <div class="rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-1 font-mono text-xs text-purple-300 shadow-sm" title="Pinning verified via taskset -c 0 and systemd cgroups">
+        <div class="rounded-lg bg-blue-950/80 px-3 py-1 font-mono text-xs text-blue-200" title="Pinning verified via taskset -c 0 and systemd cgroups">
           CPU: Core 0 Pinned &bull; 2GB Ceil
         </div>
         
         <!-- Active Model Badge -->
-        <div class="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 font-mono text-xs text-cyan-300 shadow-sm" title="TFLite 8-bit dynamic quantized hybrid model">
+        <div class="rounded-lg bg-blue-950/80 px-3 py-1 font-mono text-xs text-blue-200" title="TFLite 8-bit dynamic quantized hybrid model">
           Model: {{ summary.active_model.version }} ({{ summary.active_model.file_size_kb }} KB)
         </div>
       </div>
@@ -64,57 +62,57 @@
     <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4" aria-label="Key Performance Indicators">
       
       <!-- KPI 1: Total Flows -->
-      <div class="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-500/40 shadow-sm flex flex-col justify-between">
-        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Flows</span>
+      <div class="bg-[#091124] rounded-2xl p-5 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0e1a36] shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-semibold text-blue-300/70 uppercase tracking-wider">Total Flows</span>
         <div class="my-2">
           <span class="text-2xl sm:text-3xl font-bold tracking-tight text-white tabular-nums" id="kpi-total-flows">{{ summary.total_flows_processed }}</span>
         </div>
-        <span class="text-[11px] text-slate-500">10-flow sequence windows</span>
+        <span class="text-[11px] text-blue-400/50">10-flow sequence windows</span>
       </div>
 
       <!-- KPI 2: Benign Flows -->
-      <div class="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-500/40 shadow-sm flex flex-col justify-between">
-        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Benign Traffic</span>
+      <div class="bg-[#091124] rounded-2xl p-5 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0e1a36] shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-semibold text-blue-300/70 uppercase tracking-wider">Benign Traffic</span>
         <div class="my-2">
-          <span class="text-2xl sm:text-3xl font-bold tracking-tight text-emerald-400 tabular-nums" id="kpi-benign-flows">{{ summary.benign_flows }}</span>
+          <span class="text-2xl sm:text-3xl font-bold tracking-tight text-white tabular-nums" id="kpi-benign-flows">{{ summary.benign_flows }}</span>
         </div>
-        <span class="text-[11px] text-slate-500">Verified normal perimeter</span>
+        <span class="text-[11px] text-blue-400/50">Verified normal perimeter</span>
       </div>
 
       <!-- KPI 3: Malicious Threats -->
-      <div class="bg-slate-900/70 border border-rose-500/30 bg-rose-950/10 rounded-2xl p-5 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-rose-500/50 shadow-sm flex flex-col justify-between">
-        <span class="text-xs font-semibold text-rose-300 uppercase tracking-wider">Threats Flagged</span>
+      <div class="bg-[#091124] rounded-2xl p-5 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0e1a36] shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-semibold text-blue-200 uppercase tracking-wider">Threats Flagged</span>
         <div class="my-2">
-          <span class="text-2xl sm:text-3xl font-bold tracking-tight text-rose-400 tabular-nums" id="kpi-threats">{{ summary.malicious_threats }}</span>
+          <span class="text-2xl sm:text-3xl font-bold tracking-tight text-blue-400 tabular-nums" id="kpi-threats">{{ summary.malicious_threats }}</span>
         </div>
-        <span class="text-[11px] text-rose-400/60">Multi-stage intrusions</span>
+        <span class="text-[11px] text-blue-400/60">Multi-stage intrusions</span>
       </div>
 
       <!-- KPI 4: Active Alerts Queue -->
-      <div class="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-amber-500/40 shadow-sm flex flex-col justify-between">
-        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Alerts Queue</span>
+      <div class="bg-[#091124] rounded-2xl p-5 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0e1a36] shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-semibold text-blue-300/70 uppercase tracking-wider">Alerts Queue</span>
         <div class="my-2">
-          <span class="text-2xl sm:text-3xl font-bold tracking-tight text-amber-400 tabular-nums" id="kpi-alerts-count">{{ summary.unacknowledged_alerts }}</span>
+          <span class="text-2xl sm:text-3xl font-bold tracking-tight text-blue-300 tabular-nums" id="kpi-alerts-count">{{ summary.unacknowledged_alerts }}</span>
         </div>
-        <span class="text-[11px] text-slate-500">Pending SecOps triage</span>
+        <span class="text-[11px] text-blue-400/50">Pending SecOps triage</span>
       </div>
 
       <!-- KPI 5: Mean Latency -->
-      <div class="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-500/40 shadow-sm flex flex-col justify-between">
-        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Mean Latency</span>
+      <div class="bg-[#091124] rounded-2xl p-5 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0e1a36] shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-semibold text-blue-300/70 uppercase tracking-wider">Mean Latency</span>
         <div class="my-2">
-          <span class="text-2xl sm:text-3xl font-bold tracking-tight text-cyan-400 tabular-nums">&lt; 0.05 ms</span>
+          <span class="text-2xl sm:text-3xl font-bold tracking-tight text-white tabular-nums">&lt; 0.05 ms</span>
         </div>
-        <span class="text-[11px] text-emerald-400 font-medium">&le; 50 ms budget (PASSED)</span>
+        <span class="text-[11px] text-blue-400 font-medium">&le; 50 ms budget (PASSED)</span>
       </div>
 
       <!-- KPI 6: Memory RSS -->
-      <div class="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-purple-500/40 shadow-sm flex flex-col justify-between">
-        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Memory RSS</span>
+      <div class="bg-[#091124] rounded-2xl p-5 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0e1a36] shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-semibold text-blue-300/70 uppercase tracking-wider">Memory RSS</span>
         <div class="my-2">
-          <span class="text-2xl sm:text-3xl font-bold tracking-tight text-purple-400 tabular-nums">&lt; 76 MB</span>
+          <span class="text-2xl sm:text-3xl font-bold tracking-tight text-white tabular-nums">&lt; 76 MB</span>
         </div>
-        <span class="text-[11px] text-emerald-400 font-medium">&le; 512 MB target (PASSED)</span>
+        <span class="text-[11px] text-blue-400 font-medium">&le; 512 MB target (PASSED)</span>
       </div>
 
     </section>
@@ -123,40 +121,40 @@
     <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       
       <!-- Left Panel: Prioritized Security Threat Alerts -->
-      <article class="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-5 sm:p-6 backdrop-blur-sm shadow-sm flex flex-col gap-4">
-        <div class="flex items-center justify-between border-b border-slate-800/70 pb-3">
+      <article class="bg-[#091124] rounded-2xl p-5 sm:p-6 backdrop-blur-sm shadow-sm flex flex-col gap-4">
+        <div class="flex items-center justify-between pb-3 bg-blue-950/30 px-3 py-2 rounded-xl">
           <div class="flex items-center gap-2.5">
-            <div class="size-2.5 rounded-full bg-rose-500 animate-ping"></div>
+            <div class="size-2.5 rounded-full bg-blue-500 animate-ping"></div>
             <h2 class="text-sm sm:text-base font-bold text-white flex items-center gap-2">
               Prioritized Threat Alerts
-              <span class="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30" id="alert-badge-count">
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-600 text-white" id="alert-badge-count">
                 {{ summary.unacknowledged_alerts }}
               </span>
             </h2>
           </div>
-          <span class="text-xs text-slate-400 font-mono">Live WebSocket/REST Poll</span>
+          <span class="text-xs text-blue-300/70 font-mono">Live WebSocket/REST Poll</span>
         </div>
 
         <!-- Alert Cards Container -->
         <div class="flex flex-col gap-3 max-h-[460px] overflow-y-auto pr-1" id="alert-list">
-          <div class="text-center py-12 text-slate-500 text-xs">Loading active perimeter threats...</div>
+          <div class="text-center py-12 text-blue-300/60 text-xs">Loading active perimeter threats...</div>
         </div>
       </article>
 
       <!-- Right Panel: Live Ingestion Stream -->
-      <article class="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-5 sm:p-6 backdrop-blur-sm shadow-sm flex flex-col gap-4">
-        <div class="flex items-center justify-between border-b border-slate-800/70 pb-3">
+      <article class="bg-[#091124] rounded-2xl p-5 sm:p-6 backdrop-blur-sm shadow-sm flex flex-col gap-4">
+        <div class="flex items-center justify-between pb-3 bg-blue-950/30 px-3 py-2 rounded-xl">
           <div class="flex items-center gap-2">
-            <div class="size-2.5 rounded-full bg-cyan-400"></div>
+            <div class="size-2.5 rounded-full bg-blue-400"></div>
             <h2 class="text-sm sm:text-base font-bold text-white">Live Flow Classification Feed</h2>
           </div>
-          <span class="text-xs text-slate-400 font-mono">10-Flow Sequence Windows</span>
+          <span class="text-xs text-blue-300/70 font-mono">10-Flow Sequence Windows</span>
         </div>
 
         <!-- Stream Table -->
-        <div class="max-h-[460px] overflow-y-auto rounded-lg border border-slate-800/80 bg-slate-950/60">
-          <table class="w-full text-left text-xs divide-y divide-slate-800/60">
-            <thead class="sticky top-0 bg-slate-900/95 backdrop-blur-md text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+        <div class="max-h-[460px] overflow-y-auto rounded-xl bg-[#040814] p-1">
+          <table class="w-full text-left text-xs">
+            <thead class="sticky top-0 bg-[#0c162e] text-blue-300 font-semibold uppercase tracking-wider text-[11px]">
               <tr>
                 <th class="px-3 py-2.5">Seq</th>
                 <th class="px-3 py-2.5">Time</th>
@@ -168,9 +166,9 @@
                 <th class="px-3 py-2.5">Latency</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-slate-800/40 text-slate-300 font-mono" id="stream-table-body">
+            <tbody class="text-blue-100 font-mono" id="stream-table-body">
               <tr>
-                <td colspan="8" class="text-center py-12 text-slate-500 font-sans">Connecting to live stream playback engine...</td>
+                <td colspan="8" class="text-center py-12 text-blue-300/60 font-sans">Connecting to live stream playback engine...</td>
               </tr>
             </tbody>
           </table>
@@ -180,12 +178,12 @@
     </section>
 
     <!-- Bottom Panel: Simulated Edge Hardware Telemetry (psutil) -->
-    <section class="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-5 sm:p-6 backdrop-blur-sm shadow-sm flex flex-col gap-4" aria-label="Hardware Resource Telemetry">
-      <div class="flex flex-wrap items-center justify-between border-b border-slate-800/70 pb-3 gap-2">
+    <section class="bg-[#091124] rounded-2xl p-5 sm:p-6 backdrop-blur-sm shadow-sm flex flex-col gap-4" aria-label="Hardware Resource Telemetry">
+      <div class="flex flex-wrap items-center justify-between pb-3 bg-blue-950/30 px-3 py-2 rounded-xl gap-2">
         <h2 class="text-sm sm:text-base font-bold text-white flex items-center gap-2">
           Edge Hardware Telemetry (psutil Instrumentation)
         </h2>
-        <span class="text-xs px-2.5 py-0.5 rounded-full border border-purple-500/30 bg-purple-500/10 text-purple-300 font-mono">
+        <span class="text-xs px-2.5 py-0.5 rounded-full bg-blue-950 text-blue-300 font-mono">
           Raspberry Pi Target Budget Compliance
         </span>
       </div>
@@ -194,39 +192,39 @@
       <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
         
         <!-- CPU Utilization Gauge -->
-        <div class="bg-slate-950/60 border border-slate-800/70 rounded-xl p-4 flex flex-col gap-3">
+        <div class="bg-[#040814] rounded-xl p-4 flex flex-col gap-3">
           <div class="flex justify-between items-center text-xs font-semibold">
-            <span class="text-slate-300">CPU Load (Pinned Core 0)</span>
-            <span class="font-mono text-cyan-400 font-bold" id="gauge-cpu-val">{{ summary.latest_telemetry.cpu_percent }}%</span>
+            <span class="text-blue-200">CPU Load (Pinned Core 0)</span>
+            <span class="font-mono text-white font-bold" id="gauge-cpu-val">{{ summary.latest_telemetry.cpu_percent }}%</span>
           </div>
-          <div class="h-2.5 w-full bg-slate-800/80 rounded-full overflow-hidden">
-            <div class="h-full rounded-full transition-all duration-300 bg-linear-to-r from-cyan-500 to-blue-500" id="gauge-cpu-bar" style="width: {{ summary.latest_telemetry.cpu_percent }}%;"></div>
+          <div class="h-2.5 w-full bg-[#0c162e] rounded-full overflow-hidden">
+            <div class="h-full rounded-full transition-all duration-300 bg-blue-500" id="gauge-cpu-bar" style="width: {{ summary.latest_telemetry.cpu_percent }}%;"></div>
           </div>
-          <span class="text-[11px] text-slate-500">100% capacity represents 1 logical CPU core</span>
+          <span class="text-[11px] text-blue-400/60">100% capacity represents 1 logical CPU core</span>
         </div>
 
         <!-- Memory RSS Gauge -->
-        <div class="bg-slate-950/60 border border-slate-800/70 rounded-xl p-4 flex flex-col gap-3">
+        <div class="bg-[#040814] rounded-xl p-4 flex flex-col gap-3">
           <div class="flex justify-between items-center text-xs font-semibold">
-            <span class="text-slate-300">Resident Memory (RSS)</span>
-            <span class="font-mono text-purple-400 font-bold" id="gauge-mem-val">{{ summary.latest_telemetry.memory_rss_mb }} MB / 512 MB</span>
+            <span class="text-blue-200">Resident Memory (RSS)</span>
+            <span class="font-mono text-white font-bold" id="gauge-mem-val">{{ summary.latest_telemetry.memory_rss_mb }} MB / 512 MB</span>
           </div>
-          <div class="h-2.5 w-full bg-slate-800/80 rounded-full overflow-hidden">
-            <div class="h-full rounded-full transition-all duration-300 bg-linear-to-r from-purple-500 to-rose-500" id="gauge-mem-bar" style="width: 15%;"></div>
+          <div class="h-2.5 w-full bg-[#0c162e] rounded-full overflow-hidden">
+            <div class="h-full rounded-full transition-all duration-300 bg-blue-600" id="gauge-mem-bar" style="width: 15%;"></div>
           </div>
-          <span class="text-[11px] text-slate-500">LiteRT memory footprint: well below 512 MB ceiling</span>
+          <span class="text-[11px] text-blue-400/60">LiteRT memory footprint: well below 512 MB ceiling</span>
         </div>
 
         <!-- Ingestion Throughput Gauge -->
-        <div class="bg-slate-950/60 border border-slate-800/70 rounded-xl p-4 flex flex-col gap-3">
+        <div class="bg-[#040814] rounded-xl p-4 flex flex-col gap-3">
           <div class="flex justify-between items-center text-xs font-semibold">
-            <span class="text-slate-300">Flow Ingestion Rate</span>
-            <span class="font-mono text-emerald-400 font-bold" id="gauge-throughput-val">{{ summary.latest_telemetry.throughput_fps }} flows/s</span>
+            <span class="text-blue-200">Flow Ingestion Rate</span>
+            <span class="font-mono text-white font-bold" id="gauge-throughput-val">{{ summary.latest_telemetry.throughput_fps }} flows/s</span>
           </div>
-          <div class="h-2.5 w-full bg-slate-800/80 rounded-full overflow-hidden">
-            <div class="h-full rounded-full transition-all duration-300 bg-linear-to-r from-emerald-500 to-cyan-500" style="width: 45%;"></div>
+          <div class="h-2.5 w-full bg-[#0c162e] rounded-full overflow-hidden">
+            <div class="h-full rounded-full transition-all duration-300 bg-blue-400" id="gauge-throughput-bar" style="width: 45%;"></div>
           </div>
-          <span class="text-[11px] text-slate-500">Continuous playback from benchmark stream</span>
+          <span class="text-[11px] text-blue-400/60">Continuous playback from benchmark stream</span>
         </div>
 
       </div>
@@ -235,15 +233,15 @@
   </main>
 
   <!-- Academic Attribution Footer -->
-  <footer class="border-t border-slate-800/80 py-6 px-4 text-center text-xs text-slate-500 bg-slate-950/80">
+  <footer class="py-6 px-4 text-center text-xs text-blue-300/60 bg-[#030610]">
     <div class="max-w-7xl mx-auto space-y-1.5">
-      <p class="font-semibold text-slate-400">
+      <p class="font-semibold text-white">
         Design and Implementation of an AI-Powered Network Threat Detection System in Resource Constrained Environments
       </p>
       <p>
-        Researcher: <strong class="text-slate-300">Imeh Grace Mfon</strong> (Reg No: 21/SC/CO/1117) &bull; Supervisor: <strong class="text-slate-300">Mr. U. J. Ntia</strong> &bull; Department of Computer Science, University of Uyo
+        Researcher: <strong class="text-white">Imeh Grace Mfon</strong> (Reg No: 21/SC/CO/1117) &bull; Supervisor: <strong class="text-white">Mr. U. J. Ntia</strong> &bull; Department of Computer Science, University of Uyo
       </p>
-      <p class="text-[11px] text-slate-600 font-mono">
+      <p class="text-[11px] text-blue-400/50 font-mono">
         Workstation x86_64 single-core cgroups simulation &bull; Power Draw: NOT MEASURED &bull; Version 1.0.0
       </p>
     </div>
