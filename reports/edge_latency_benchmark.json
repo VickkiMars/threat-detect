@@ -1,0 +1,39 @@
+{
+  "benchmark_name": "Edge Hardware Feasibility & Latency Percentiles (Story B7.2)",
+  "model": "hybrid_model.tflite",
+  "iterations": 1000,
+  "warmup": 50,
+  "latency_percentiles": {
+    "mean_ms": 0.024425,
+    "std_ms": 0.008049,
+    "min_ms": 0.019214,
+    "p25_ms": 0.019969,
+    "median_ms": 0.020422,
+    "p75_ms": 0.022704,
+    "p90_ms": 0.038147,
+    "p95_ms": 0.04047,
+    "p99_ms": 0.05101,
+    "max_ms": 0.067127,
+    "iqr_ms": 0.002734,
+    "jitter_ms": 0.047913
+  },
+  "throughput": {
+    "sequences_per_sec": 26482.71,
+    "flows_per_sec": 264827.06,
+    "total_benchmark_time_sec": 0.0378
+  },
+  "hardware": {
+    "peak_rss_mb": 138.35,
+    "peak_vms_mb": 245.77,
+    "model_size_kb": 56.89,
+    "cpu_pinned": "Core 0",
+    "threads": 1,
+    "power_draw": "NOT MEASURED"
+  },
+  "nfr_compliance": {
+    "nfr1_latency_passed": true,
+    "nfr2_model_size_passed": true,
+    "nfr3_memory_rss_passed": true,
+    "nfr5_cpu_only_passed": true
+  }
+}

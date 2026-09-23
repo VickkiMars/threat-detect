@@ -73,10 +73,17 @@ def api_system_metrics():
 def api_benchmarks():
     """Returns the dissertation academic evaluation benchmarks and model comparison matrix."""
     summary_path = REPORTS_DIR / "evaluation_summary.json"
+    edge_lat_path = REPORTS_DIR / "edge_latency_benchmark.json"
     if summary_path.exists():
         try:
             with open(summary_path, "r") as f:
                 data = json.load(f)
+            if edge_lat_path.exists():
+                try:
+                    with open(edge_lat_path, "r") as f_edge:
+                        data["edge_latency"] = json.load(f_edge)
+                except Exception:
+                    pass
             return jsonify({"status": "success", "data": data})
         except Exception as e:
             return jsonify({"status": "error", "message": str(e)}), 500

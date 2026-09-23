@@ -1,0 +1,2 @@
+Model,Iterations,Mean Latency (ms),Median Latency (ms),p90 Latency (ms),p95 Latency (ms),p99 Latency (ms),Min Latency (ms),Max Latency (ms),IQR Jitter (ms),Throughput (seq/s),Throughput (flows/s),Resident Memory RSS (MB),Model Size (KB),NFR1 Status,NFR2 Status,NFR3 Status
+hybrid_model.tflite,1000,0.0244,0.0204,0.0381,0.0405,0.051,0.0192,0.0671,0.0027,26482.71,264827.06,138.35,56.89,PASSED,PASSED,PASSED
