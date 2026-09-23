@@ -15,7 +15,7 @@
 | **T3.2** | B5.3, B6.2 | Verify real-time threat alert lifecycle: validate severity thresholding (LOW, MEDIUM, HIGH, CRITICAL), instant operator acknowledgment via dashboard REST API, and alert queue state synchronization. | S | T3.1 | Completed |
 | **T3.3** | DoD | Expand automated test suite coverage: implement dedicated test modules for balancing (`test_balancing.py`), model architectures (`test_models.py`), quantization (`test_quantization.py`), and evaluation (`test_evaluation.py`). | M | T3.1 | Completed |
 | **T3.4** | B2.1, B7.1 | Evaluate cross-dataset portability on CICIDS2017 benchmark: assess zero-shot / fine-tuned generalization on the 200,000 class-capped subset to substantiate Chapter 4/5 portability findings. | M | T3.1 | Completed |
-| **T3.5** | DoD | Compile comprehensive Dissertation Acceptance & Defense Package (`reports/system_acceptance_report.md`): consolidate Tables 11, 12, 13, NFR1–NFR7 verification matrix, and defense demonstration runbook. | S | T3.2, T3.3 | Ready |
+| **T3.5** | DoD | Compile comprehensive Dissertation Acceptance & Defense Package (`reports/system_acceptance_report.md`): consolidate Tables 11, 12, 13, NFR1–NFR7 verification matrix, and defense demonstration runbook. | S | T3.2, T3.3 | Completed |
 
 ---
 
