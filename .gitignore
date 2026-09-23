@@ -36,6 +36,7 @@ venv.bak/
 *.db-shm
 data/*.db
 data/UNSW_NB15_*.csv
+models/checkpoints/
 logs/*.csv
 logs/*.log
 

@@ -1,0 +1,201 @@
+{
+  "generated_at": "2026-09-23 14:45:03Z",
+  "models_evaluated": 7,
+  "benchmarks": [
+    {
+      "model_name": "Decision Tree",
+      "accuracy": 0.8767156565043119,
+      "precision_macro": 0.8779097170329205,
+      "recall_macro": 0.8727084765097637,
+      "f1_macro": 0.8746614232768237,
+      "fpr": 0.16680183833468504,
+      "latency_ms": 0.3749,
+      "file_size_kb": 60.26,
+      "parameters": 753,
+      "test_samples": 8233,
+      "cm_path": "/api/figures/confusion_matrix_decision_tree.png"
+    },
+    {
+      "model_name": "Random Forest",
+      "accuracy": 0.927608405198591,
+      "precision_macro": 0.9391272596965712,
+      "recall_macro": 0.9202840739631701,
+      "f1_macro": 0.9255683924585267,
+      "fpr": 0.1519329548526629,
+      "latency_ms": 48.3588,
+      "file_size_kb": 8338.12,
+      "parameters": 106208,
+      "test_samples": 8233,
+      "cm_path": "/api/figures/confusion_matrix_random_forest.png"
+    },
+    {
+      "model_name": "SVM",
+      "accuracy": 0.8815741527997085,
+      "precision_macro": 0.9023684565577216,
+      "recall_macro": 0.8702240188665542,
+      "f1_macro": 0.87663099771103,
+      "fpr": 0.24168694241686942,
+      "latency_ms": 1.2223,
+      "file_size_kb": 1823.42,
+      "parameters": 230560,
+      "test_samples": 8233,
+      "cm_path": "/api/figures/confusion_matrix_svm.png"
+    },
+    {
+      "model_name": "CNN-only",
+      "accuracy": 0.9369610105672295,
+      "precision_macro": 0.9409078067214316,
+      "recall_macro": 0.9328829439590309,
+      "f1_macro": 0.9357939163779083,
+      "fpr": 0.10732630440659638,
+      "latency_ms": 0.656,
+      "file_size_kb": 260.59,
+      "parameters": 24962,
+      "test_samples": 8233,
+      "cm_path": "/api/figures/confusion_matrix_cnn-only.png"
+    },
+    {
+      "model_name": "LSTM-only",
+      "accuracy": 0.93623223612292,
+      "precision_macro": 0.9411779170670562,
+      "recall_macro": 0.9316487198998573,
+      "f1_macro": 0.934963305405619,
+      "fpr": 0.11354420113544202,
+      "latency_ms": 1.0213,
+      "file_size_kb": 113.95,
+      "parameters": 24418,
+      "test_samples": 8233,
+      "cm_path": "/api/figures/confusion_matrix_lstm-only.png"
+    },
+    {
+      "model_name": "Hybrid CNN\u2013LSTM",
+      "accuracy": 0.9263937811247419,
+      "precision_macro": 0.9332331718961825,
+      "recall_macro": 0.9207247085580779,
+      "f1_macro": 0.9247161781274003,
+      "fpr": 0.13517166801838335,
+      "latency_ms": 1.1755,
+      "file_size_kb": 172.99,
+      "parameters": 39458,
+      "test_samples": 8233,
+      "cm_path": "/api/figures/confusion_matrix_hybrid_cnn_lstm.png"
+    },
+    {
+      "model_name": "Compressed TensorFlow Lite Hybrid",
+      "accuracy": 0.9245718450139682,
+      "precision_macro": 0.9288831670296207,
+      "recall_macro": 0.9199916094587015,
+      "f1_macro": 0.9230973795298804,
+      "fpr": 0.12516896458502297,
+      "latency_ms": 0.0073,
+      "file_size_kb": 56.89,
+      "parameters": 50594,
+      "test_samples": 8233,
+      "cm_path": "/api/figures/confusion_matrix_tflite_hybrid.png"
+    }
+  ],
+  "table_11": [
+    {
+      "Model version": "Full-precision Python/Keras hybrid",
+      "File size": "172.99 KB",
+      "Parameters": "39,458",
+      "Accuracy": "0.926394",
+      "Macro precision": "0.933233",
+      "Macro recall": "0.920725",
+      "Macro F1": "0.924716",
+      "FPR": "0.135172"
+    },
+    {
+      "Model version": "Dynamic-range quantized hybrid",
+      "File size": "56.89 KB",
+      "Parameters": "50,594",
+      "Accuracy": "0.924572",
+      "Macro precision": "0.928883",
+      "Macro recall": "0.919992",
+      "Macro F1": "0.923097",
+      "FPR": "0.125169"
+    },
+    {
+      "Model version": "TensorFlow Lite FlatBuffer hybrid",
+      "File size": "56.89 KB",
+      "Parameters": "50,594",
+      "Accuracy": "0.924572",
+      "Macro precision": "0.928883",
+      "Macro recall": "0.919992",
+      "Macro F1": "0.923097",
+      "FPR": "0.125169"
+    }
+  ],
+  "table_12": [
+    {
+      "Dataset / Model": "UNSW-NB15 Decision Tree",
+      "Accuracy": "0.876716",
+      "Precision": "0.877910",
+      "Recall": "0.872708",
+      "F1 score": "0.874661",
+      "False-positive rate": "0.166802",
+      "Inference Latency (ms)": "0.375",
+      "Test samples": "8,233"
+    },
+    {
+      "Dataset / Model": "UNSW-NB15 Random Forest",
+      "Accuracy": "0.927608",
+      "Precision": "0.939127",
+      "Recall": "0.920284",
+      "F1 score": "0.925568",
+      "False-positive rate": "0.151933",
+      "Inference Latency (ms)": "48.359",
+      "Test samples": "8,233"
+    },
+    {
+      "Dataset / Model": "UNSW-NB15 SVM",
+      "Accuracy": "0.881574",
+      "Precision": "0.902368",
+      "Recall": "0.870224",
+      "F1 score": "0.876631",
+      "False-positive rate": "0.241687",
+      "Inference Latency (ms)": "1.222",
+      "Test samples": "8,233"
+    },
+    {
+      "Dataset / Model": "UNSW-NB15 CNN-only",
+      "Accuracy": "0.936961",
+      "Precision": "0.940908",
+      "Recall": "0.932883",
+      "F1 score": "0.935794",
+      "False-positive rate": "0.107326",
+      "Inference Latency (ms)": "0.656",
+      "Test samples": "8,233"
+    },
+    {
+      "Dataset / Model": "UNSW-NB15 LSTM-only",
+      "Accuracy": "0.936232",
+      "Precision": "0.941178",
+      "Recall": "0.931649",
+      "F1 score": "0.934963",
+      "False-positive rate": "0.113544",
+      "Inference Latency (ms)": "1.021",
+      "Test samples": "8,233"
+    },
+    {
+      "Dataset / Model": "UNSW-NB15 Hybrid CNN\u2013LSTM",
+      "Accuracy": "0.926394",
+      "Precision": "0.933233",
+      "Recall": "0.920725",
+      "F1 score": "0.924716",
+      "False-positive rate": "0.135172",
+      "Inference Latency (ms)": "1.175",
+      "Test samples": "8,233"
+    },
+    {
+      "Dataset / Model": "UNSW-NB15 Compressed TensorFlow Lite Hybrid",
+      "Accuracy": "0.924572",
+      "Precision": "0.928883",
+      "Recall": "0.919992",
+      "F1 score": "0.923097",
+      "False-positive rate": "0.125169",
+      "Inference Latency (ms)": "0.007",
+      "Test samples": "8,233"
+    }
+  ]
+}

@@ -16,7 +16,7 @@ from src.config import WINDOW_SIZE, PCA_COMPONENTS, PCA_VARIANCE_TARGET, SCALER_
 NUMERIC_FEATURES = [
     "dur", "sbytes", "dbytes", "sttl", "dttl", "sloss", "dloss", "sload", "dload",
     "spkts", "dpkts", "swin", "dwin", "stcpb", "dtcpb", "smeansz", "dmeansz",
-    "trans_depth", "res_bdy_len", "sjit", "djit", "stime", "ltime", "sintpkt",
+    "trans_depth", "res_bdy_len", "sjit", "djit", "sintpkt",
     "dintpkt", "tcprtt", "synack", "ackdat", "is_sm_ips_ports", "ct_state_ttl",
     "ct_flw_http_mthd", "is_ftp_login", "ct_ftp_cmd", "ct_srv_src", "ct_srv_dst",
     "ct_dst_ltm", "ct_src_ltm", "ct_src_dport_ltm", "ct_dst_sport_ltm", "ct_dst_src_ltm"
@@ -24,9 +24,22 @@ NUMERIC_FEATURES = [
 
 CATEGORICAL_FEATURES = ["proto", "service", "state"]
 
+COLUMN_ALIASES = {
+    "smean": "smeansz",
+    "dmean": "dmeansz",
+    "response_body_len": "res_bdy_len",
+    "sinpkt": "sintpkt",
+    "dinpkt": "dintpkt",
+}
+
 def clean_flow_records(df: pd.DataFrame) -> pd.DataFrame:
-    """Replaces infinite numbers and imputes missing values."""
+    """Replaces infinite numbers, normalizes aliases, and imputes missing values."""
     df_clean = df.copy()
+    
+    # Standardize column aliases
+    rename_map = {k: v for k, v in COLUMN_ALIASES.items() if k in df_clean.columns}
+    if rename_map:
+        df_clean = df_clean.rename(columns=rename_map)
     
     # Strip string whitespaces
     for col in df_clean.select_dtypes(include=["object", "string"]).columns:
@@ -63,6 +76,8 @@ def fit_preprocessors(
             cols.remove("label")
         if "attack_cat" in cols:
             cols.remove("attack_cat")
+        if "id" in cols:
+            cols.remove("id")
             
     X_train = clean_df[cols].values.astype(np.float32)
     

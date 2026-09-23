@@ -1,0 +1,19 @@
+{
+  "model_name": "hybrid_model_tflite_quantized",
+  "format": "TensorFlow Lite FlatBuffer (TFL3)",
+  "quantization": "8-bit dynamic-range quantization",
+  "input_shape": [
+    1,
+    10,
+    22
+  ],
+  "output_shape": [
+    1,
+    2
+  ],
+  "file_size_kb": 56.89,
+  "nfr2_compliant": true,
+  "sha256": "8cedeb71a1c0b7b7b221492208b6f95f577f4cfb03ce82c1a6ffd4a37ec41653",
+  "exported_at": "2026-09-23T14:44:49.580239+00:00",
+  "prob_sum_verification": 1.0
+}
