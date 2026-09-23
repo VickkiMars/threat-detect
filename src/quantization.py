@@ -26,6 +26,7 @@ CHECKPOINTS_DIR = MODELS_DIR / "checkpoints"
 def quantize_and_export_hybrid_model(
     checkpoint_path: Optional[Path] = None,
     output_tflite_path: Optional[Path] = None,
+    metadata_path: Optional[Path] = None,
     window_size: int = WINDOW_SIZE,
     n_features: int = PCA_COMPONENTS
 ) -> Dict[str, Any]:
@@ -306,7 +307,12 @@ def quantize_and_export_hybrid_model(
         "prob_sum_verification": round(prob_sum, 4)
     }
     
-    meta_file = Path(METADATA_PATH)
+    if metadata_path:
+        meta_file = Path(metadata_path)
+    elif output_tflite_path:
+        meta_file = out_file.parent / "metadata.json"
+    else:
+        meta_file = Path(METADATA_PATH)
     meta_file.parent.mkdir(parents=True, exist_ok=True)
     with open(meta_file, "w") as f:
         json.dump(metadata, f, indent=2)
