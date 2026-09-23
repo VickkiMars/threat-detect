@@ -50,6 +50,14 @@
         <div class="rounded-lg bg-slate-100 px-3 py-1 font-mono text-xs text-slate-700 shadow-xs" title="TFLite 8-bit dynamic quantized hybrid model">
           Model: {{ summary.active_model.version }} ({{ summary.active_model.file_size_kb }} KB)
         </div>
+
+        <!-- Academic Benchmarks Modal Launcher -->
+        <button id="btn-open-benchmarks" class="inline-flex items-center gap-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 text-white px-3 py-1 font-mono text-xs font-bold shadow-xs cursor-pointer transition-all duration-150" title="Inspect Dissertation Benchmark Tables & Confusion Matrices">
+          <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          Benchmarks
+        </button>
       </div>
 
     </div>
@@ -249,6 +257,156 @@
       </p>
     </div>
   </footer>
+
+  <!-- Academic Evaluation & Benchmarks Modal -->
+  <div id="benchmarks-modal" class="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 hidden">
+    <div class="bg-white rounded-3xl max-w-5xl w-full p-6 sm:p-8 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+      
+      <!-- Modal Header -->
+      <div class="flex items-start justify-between pb-4 bg-sky-50 px-5 py-4 rounded-2xl shrink-0">
+        <div>
+          <div class="flex items-center gap-2.5">
+            <span class="text-xs px-2.5 py-0.5 rounded-full bg-sky-500 text-white font-bold">Dissertation Evaluation</span>
+            <h2 class="text-base sm:text-lg font-bold text-slate-900">Academic Model Benchmarks & Quantization Trade-offs</h2>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">
+            Empirical evaluation replicating Table 11 & Table 12 on UNSW-NB15 benchmark splits (8,233 held-out test windows).
+          </p>
+        </div>
+        <button id="btn-close-benchmarks" class="size-8 rounded-full bg-white hover:bg-sky-100 text-slate-600 hover:text-sky-800 flex items-center justify-center font-bold text-lg cursor-pointer transition-all shadow-xs" title="Close (Esc)">
+          &times;
+        </button>
+      </div>
+
+      <!-- Top 4 Summary Cards -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 my-4 shrink-0">
+        <div class="bg-sky-50 rounded-2xl p-3 flex flex-col justify-between shadow-xs">
+          <span class="text-[10px] uppercase font-bold text-slate-400">Deployed Model</span>
+          <span class="text-xs font-bold text-sky-800 truncate" id="bench-model-name">TFLite Hybrid (8-Bit)</span>
+          <span class="text-[10px] text-sky-600">Zero-copy edge FlatBuffer</span>
+        </div>
+        <div class="bg-sky-50 rounded-2xl p-3 flex flex-col justify-between shadow-xs">
+          <span class="text-[10px] uppercase font-bold text-slate-400">Held-Out Accuracy</span>
+          <span class="text-xl font-extrabold text-slate-900 tabular-nums" id="bench-accuracy">92.46%</span>
+          <span class="text-[10px] text-sky-600">Recall: 92.00% &bull; F1: 92.31%</span>
+        </div>
+        <div class="bg-sky-50 rounded-2xl p-3 flex flex-col justify-between shadow-xs">
+          <span class="text-[10px] uppercase font-bold text-slate-400">Quantized Footprint</span>
+          <span class="text-xl font-extrabold text-sky-600 tabular-nums" id="bench-size">56.89 KB</span>
+          <span class="text-[10px] text-sky-700 font-semibold">&le; 150 KB target (Passed)</span>
+        </div>
+        <div class="bg-sky-50 rounded-2xl p-3 flex flex-col justify-between shadow-xs">
+          <span class="text-[10px] uppercase font-bold text-slate-400">Edge Latency</span>
+          <span class="text-xl font-extrabold text-sky-600 tabular-nums" id="bench-latency">0.007 ms</span>
+          <span class="text-[10px] text-sky-700 font-semibold">&le; 50 ms budget (Passed)</span>
+        </div>
+      </div>
+
+      <!-- Interactive Tabs Navigation -->
+      <div class="flex items-center gap-2 border-none bg-slate-100 p-1 rounded-2xl shrink-0">
+        <button id="tab-btn-table12" class="flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer bg-white text-sky-700 shadow-xs">
+          Table 12: Baseline Comparative Matrix
+        </button>
+        <button id="tab-btn-table11" class="flex-1 py-2 px-3 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all cursor-pointer">
+          Table 11: Compression Efficiency
+        </button>
+        <button id="tab-btn-cm" class="flex-1 py-2 px-3 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all cursor-pointer">
+          Confusion Matrices (Visual Diagrams)
+        </button>
+      </div>
+
+      <!-- Tab Contents Container (Scrollable) -->
+      <div class="flex-1 overflow-y-auto mt-4 pr-1">
+        
+        <!-- Tab 1: Table 12 (Comparative Baselines) -->
+        <div id="tab-content-table12" class="space-y-3">
+          <div class="overflow-x-auto rounded-2xl bg-slate-50 p-1 shadow-xs">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-sky-100/90 text-sky-950 font-bold uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th class="px-3 py-2.5">Model Architecture</th>
+                  <th class="px-2.5 py-2.5">Accuracy</th>
+                  <th class="px-2.5 py-2.5">Precision</th>
+                  <th class="px-2.5 py-2.5">Recall</th>
+                  <th class="px-2.5 py-2.5">Macro F1</th>
+                  <th class="px-2.5 py-2.5">FPR</th>
+                  <th class="px-2.5 py-2.5">Latency</th>
+                  <th class="px-2.5 py-2.5 text-right">Model Size</th>
+                </tr>
+              </thead>
+              <tbody id="table12-body" class="font-mono text-slate-700">
+                <tr>
+                  <td colspan="8" class="text-center py-8 text-slate-400 font-sans">Loading comparative benchmarks...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="text-[11px] text-slate-500 italic">
+            * Evaluated on identical 8,233 held-out test sequence windows (82,332 UNSW-NB15 flow records). Latency measured on single pinned CPU core (XNNPACK).
+          </p>
+        </div>
+
+        <!-- Tab 2: Table 11 (Quantization Trade-offs) -->
+        <div id="tab-content-table11" class="space-y-3 hidden">
+          <div class="overflow-x-auto rounded-2xl bg-slate-50 p-1 shadow-xs">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-sky-100/90 text-sky-950 font-bold uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th class="px-3 py-2.5">Model Version</th>
+                  <th class="px-2.5 py-2.5">File Size</th>
+                  <th class="px-2.5 py-2.5">Parameters</th>
+                  <th class="px-2.5 py-2.5">Accuracy</th>
+                  <th class="px-2.5 py-2.5">Precision</th>
+                  <th class="px-2.5 py-2.5">Recall</th>
+                  <th class="px-2.5 py-2.5">Macro F1</th>
+                  <th class="px-2.5 py-2.5 text-right">FPR</th>
+                </tr>
+              </thead>
+              <tbody id="table11-body" class="font-mono text-slate-700">
+                <tr>
+                  <td colspan="8" class="text-center py-8 text-slate-400 font-sans">Loading compression metrics...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="text-[11px] text-slate-500 italic">
+            * 8-bit dynamic-range quantization achieves 67.1% compression (172.99 KB &rarr; 56.89 KB) with only 0.18% accuracy trade-off.
+          </p>
+        </div>
+
+        <!-- Tab 3: Confusion Matrix Visual Viewer -->
+        <div id="tab-content-cm" class="space-y-4 hidden">
+          <!-- Model Selection Pills -->
+          <div class="flex flex-wrap items-center gap-2" id="cm-model-pills">
+            <!-- Populated dynamically -->
+          </div>
+          
+          <!-- Active Matrix Display Box -->
+          <div class="bg-slate-50 rounded-2xl p-4 sm:p-6 flex flex-col md:flex-row items-center gap-6 justify-center shadow-xs">
+            <div class="shrink-0 text-center">
+              <img id="cm-preview-img" src="/api/figures/confusion_matrix_tflite_hybrid.png" alt="Confusion Matrix Diagram" class="rounded-2xl shadow-sm max-h-[320px] max-w-full">
+            </div>
+            <div class="flex flex-col gap-3 text-xs w-full max-w-xs">
+              <div class="flex items-center justify-between">
+                <h4 class="font-bold text-slate-900 text-sm" id="cm-model-title">Compressed TFLite Hybrid</h4>
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 font-bold" id="cm-model-tag">Active Model</span>
+              </div>
+              <div class="bg-white rounded-xl p-3.5 shadow-xs space-y-2 font-mono">
+                <div class="flex justify-between items-center"><span class="text-slate-500 font-sans">Accuracy:</span> <span class="font-bold text-slate-900" id="cm-stat-acc">92.46%</span></div>
+                <div class="flex justify-between items-center"><span class="text-slate-500 font-sans">Recall (Sensitivity):</span> <span class="font-bold text-sky-600" id="cm-stat-rec">92.00%</span></div>
+                <div class="flex justify-between items-center"><span class="text-slate-500 font-sans">Macro F1:</span> <span class="font-bold text-slate-900" id="cm-stat-f1">92.31%</span></div>
+                <div class="flex justify-between items-center"><span class="text-slate-500 font-sans">False Positive Rate:</span> <span class="font-bold text-slate-700" id="cm-stat-fpr">12.52%</span></div>
+                <div class="flex justify-between items-center"><span class="text-slate-500 font-sans">Edge Latency:</span> <span class="font-bold text-sky-700" id="cm-stat-lat">0.0073 ms</span></div>
+                <div class="flex justify-between items-center"><span class="text-slate-500 font-sans">Binary Size:</span> <span class="font-bold text-slate-900" id="cm-stat-size">56.89 KB</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
 
   <script src="/static/js/dashboard.js"></script>
 </body>

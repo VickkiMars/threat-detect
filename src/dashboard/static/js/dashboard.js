@@ -208,6 +208,230 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
+  // ==============================================================================
+  // Academic Benchmarks Modal & Dissertation Evaluation Viewer
+  // ==============================================================================
+  const modalBenchmarks = document.getElementById("benchmarks-modal");
+  const btnOpenBenchmarks = document.getElementById("btn-open-benchmarks");
+  const btnCloseBenchmarks = document.getElementById("btn-close-benchmarks");
+  
+  const tabBtnTable12 = document.getElementById("tab-btn-table12");
+  const tabBtnTable11 = document.getElementById("tab-btn-table11");
+  const tabBtnCm = document.getElementById("tab-btn-cm");
+  
+  const tabContentTable12 = document.getElementById("tab-content-table12");
+  const tabContentTable11 = document.getElementById("tab-content-table11");
+  const tabContentCm = document.getElementById("tab-content-cm");
+  
+  const tbodyTable12 = document.getElementById("table12-body");
+  const tbodyTable11 = document.getElementById("table11-body");
+  const cmPillsContainer = document.getElementById("cm-model-pills");
+  
+  let benchmarksDataCache = null;
+
+  function switchTab(activeTab) {
+    const tabs = [
+      { btn: tabBtnTable12, content: tabContentTable12, id: "table12" },
+      { btn: tabBtnTable11, content: tabContentTable11, id: "table11" },
+      { btn: tabBtnCm, content: tabContentCm, id: "cm" }
+    ];
+
+    tabs.forEach(t => {
+      if (t.id === activeTab) {
+        t.btn.className = "flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer bg-white text-sky-700 shadow-xs";
+        t.content.classList.remove("hidden");
+      } else {
+        t.btn.className = "flex-1 py-2 px-3 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all cursor-pointer";
+        t.content.classList.add("hidden");
+      }
+    });
+  }
+
+  if (tabBtnTable12) tabBtnTable12.addEventListener("click", () => switchTab("table12"));
+  if (tabBtnTable11) tabBtnTable11.addEventListener("click", () => switchTab("table11"));
+  if (tabBtnCm) tabBtnCm.addEventListener("click", () => switchTab("cm"));
+
+  function openModal() {
+    if (!modalBenchmarks) return;
+    modalBenchmarks.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+    loadBenchmarksData();
+  }
+
+  function closeModal() {
+    if (!modalBenchmarks) return;
+    modalBenchmarks.classList.add("hidden");
+    document.body.style.overflow = "";
+  }
+
+  if (btnOpenBenchmarks) btnOpenBenchmarks.addEventListener("click", openModal);
+  if (btnCloseBenchmarks) btnCloseBenchmarks.addEventListener("click", closeModal);
+
+  if (modalBenchmarks) {
+    modalBenchmarks.addEventListener("click", (e) => {
+      if (e.target === modalBenchmarks) closeModal();
+    });
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && modalBenchmarks && !modalBenchmarks.classList.contains("hidden")) {
+      closeModal();
+    }
+  });
+
+  async function loadBenchmarksData() {
+    if (benchmarksDataCache) {
+      renderBenchmarks(benchmarksDataCache);
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/benchmarks");
+      if (!res.ok) {
+        tbodyTable12.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400 font-sans">No benchmark records found. Run python3 -m src.evaluate.</td></tr>`;
+        return;
+      }
+      const json = await res.json();
+      if (json.status === "success" && json.data) {
+        benchmarksDataCache = json.data;
+        renderBenchmarks(benchmarksDataCache);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch academic benchmarks:", err);
+      if (tbodyTable12) {
+        tbodyTable12.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-rose-500 font-sans">Error loading evaluation report.</td></tr>`;
+      }
+    }
+  }
+
+  function renderBenchmarks(data) {
+    const benchmarks = data.benchmarks || [];
+    
+    // Find deployed quantized model
+    const tfliteModel = benchmarks.find(b => b.model_name.includes("Lite") || b.model_name.includes("Compressed")) || benchmarks[benchmarks.length - 1];
+    if (tfliteModel) {
+      const elAcc = document.getElementById("bench-accuracy");
+      const elSize = document.getElementById("bench-size");
+      const elLat = document.getElementById("bench-latency");
+      if (elAcc) elAcc.textContent = `${(tfliteModel.accuracy * 100).toFixed(2)}%`;
+      if (elSize) elSize.textContent = `${tfliteModel.file_size_kb.toFixed(2)} KB`;
+      if (elLat) elLat.textContent = `${tfliteModel.latency_ms.toFixed(3)} ms`;
+    }
+
+    // Render Table 12
+    if (tbodyTable12 && benchmarks.length) {
+      tbodyTable12.innerHTML = benchmarks.map(m => {
+        const isDeployed = m.model_name.includes("Lite") || m.model_name.includes("Compressed");
+        const rowBg = isDeployed ? "bg-sky-50 font-bold" : "hover:bg-slate-100/60";
+        const tag = isDeployed 
+          ? `<span class="ml-2 px-2 py-0.5 rounded-full text-[10px] bg-sky-500 text-white font-sans font-bold">Active Edge</span>` 
+          : "";
+        return `
+          <tr class="${rowBg} transition-colors">
+            <td class="px-3 py-2.5 text-slate-900 font-sans flex items-center">
+              ${m.model_name} ${tag}
+            </td>
+            <td class="px-2.5 py-2.5 ${(m.accuracy >= 0.92) ? 'text-sky-700 font-bold' : 'text-slate-800'} tabular-nums">
+              ${(m.accuracy * 100).toFixed(2)}%
+            </td>
+            <td class="px-2.5 py-2.5 text-slate-700 tabular-nums">${(m.precision_macro * 100).toFixed(2)}%</td>
+            <td class="px-2.5 py-2.5 text-slate-700 tabular-nums">${(m.recall_macro * 100).toFixed(2)}%</td>
+            <td class="px-2.5 py-2.5 text-slate-700 tabular-nums">${(m.f1_macro * 100).toFixed(2)}%</td>
+            <td class="px-2.5 py-2.5 ${(m.fpr <= 0.15) ? 'text-slate-900 font-semibold' : 'text-slate-500'} tabular-nums">${(m.fpr * 100).toFixed(2)}%</td>
+            <td class="px-2.5 py-2.5 ${(m.latency_ms < 1.0) ? 'text-sky-600 font-bold' : 'text-slate-700'} tabular-nums">${m.latency_ms.toFixed(3)} ms</td>
+            <td class="px-2.5 py-2.5 text-right ${(m.file_size_kb <= 150) ? 'text-sky-700 font-bold' : 'text-slate-700'} tabular-nums">${m.file_size_kb >= 1024 ? (m.file_size_kb / 1024).toFixed(1) + ' MB' : m.file_size_kb.toFixed(1) + ' KB'}</td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    // Render Table 11
+    const t11Data = data.table_11 || [];
+    if (tbodyTable11 && t11Data.length) {
+      tbodyTable11.innerHTML = t11Data.map(r => {
+        const isQuant = r["Model version"].includes("quantized") || r["Model version"].includes("FlatBuffer");
+        const rowBg = isQuant ? "bg-sky-50 font-bold" : "hover:bg-slate-100/60";
+        return `
+          <tr class="${rowBg} transition-colors">
+            <td class="px-3 py-2.5 text-slate-900 font-sans">${r["Model version"]}</td>
+            <td class="px-2.5 py-2.5 text-sky-700 font-bold tabular-nums">${r["File size"]}</td>
+            <td class="px-2.5 py-2.5 text-slate-700 tabular-nums">${r["Parameters"]}</td>
+            <td class="px-2.5 py-2.5 text-slate-900 tabular-nums">${(Number(r["Accuracy"]) * 100).toFixed(2)}%</td>
+            <td class="px-2.5 py-2.5 text-slate-700 tabular-nums">${(Number(r["Macro precision"]) * 100).toFixed(2)}%</td>
+            <td class="px-2.5 py-2.5 text-slate-700 tabular-nums">${(Number(r["Macro recall"]) * 100).toFixed(2)}%</td>
+            <td class="px-2.5 py-2.5 text-slate-700 tabular-nums">${(Number(r["Macro F1"]) * 100).toFixed(2)}%</td>
+            <td class="px-2.5 py-2.5 text-right text-slate-700 tabular-nums">${(Number(r["FPR"]) * 100).toFixed(2)}%</td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    // Render Confusion Matrix Selection Pills
+    if (cmPillsContainer && benchmarks.length) {
+      cmPillsContainer.innerHTML = benchmarks.map((m, idx) => {
+        const isDefault = idx === benchmarks.length - 1; // default to TFLite
+        const activeClass = isDefault 
+          ? "bg-sky-500 text-white font-bold shadow-xs" 
+          : "bg-white text-slate-700 hover:bg-sky-50 font-semibold";
+        return `
+          <button 
+            data-index="${idx}" 
+            class="cm-model-pill px-3 py-1.5 rounded-xl text-xs transition-all cursor-pointer ${activeClass}">
+            ${m.model_name}
+          </button>
+        `;
+      }).join("");
+
+      // Add click listeners to pills
+      document.querySelectorAll(".cm-model-pill").forEach(pill => {
+        pill.addEventListener("click", () => {
+          const idx = parseInt(pill.getAttribute("data-index"), 10);
+          selectConfusionMatrix(benchmarks[idx], pill);
+        });
+      });
+
+      // Default select the last one (TFLite hybrid)
+      const lastPill = cmPillsContainer.querySelector(`[data-index="${benchmarks.length - 1}"]`);
+      if (lastPill) {
+        selectConfusionMatrix(benchmarks[benchmarks.length - 1], lastPill);
+      }
+    }
+  }
+
+  function selectConfusionMatrix(model, activePill) {
+    document.querySelectorAll(".cm-model-pill").forEach(p => {
+      p.className = "cm-model-pill px-3 py-1.5 rounded-xl text-xs transition-all cursor-pointer bg-white text-slate-700 hover:bg-sky-50 font-semibold";
+    });
+    if (activePill) {
+      activePill.className = "cm-model-pill px-3 py-1.5 rounded-xl text-xs transition-all cursor-pointer bg-sky-500 text-white font-bold shadow-xs";
+    }
+
+    const img = document.getElementById("cm-preview-img");
+    const title = document.getElementById("cm-model-title");
+    const tag = document.getElementById("cm-model-tag");
+    const elAcc = document.getElementById("cm-stat-acc");
+    const elRec = document.getElementById("cm-stat-rec");
+    const elF1 = document.getElementById("cm-stat-f1");
+    const elFpr = document.getElementById("cm-stat-fpr");
+    const elLat = document.getElementById("cm-stat-lat");
+    const elSize = document.getElementById("cm-stat-size");
+
+    if (img && model.cm_path) img.src = model.cm_path;
+    if (title) title.textContent = model.model_name;
+    if (tag) {
+      const isDeployed = model.model_name.includes("Lite") || model.model_name.includes("Compressed");
+      tag.textContent = isDeployed ? "Active Edge Model" : "Comparative Baseline";
+      tag.className = isDeployed ? "text-[10px] px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 font-bold" : "text-[10px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-medium";
+    }
+
+    if (elAcc) elAcc.textContent = `${(model.accuracy * 100).toFixed(2)}%`;
+    if (elRec) elRec.textContent = `${(model.recall_macro * 100).toFixed(2)}%`;
+    if (elF1) elF1.textContent = `${(model.f1_macro * 100).toFixed(2)}%`;
+    if (elFpr) elFpr.textContent = `${(model.fpr * 100).toFixed(2)}%`;
+    if (elLat) elLat.textContent = `${model.latency_ms.toFixed(4)} ms`;
+    if (elSize) elSize.textContent = `${model.file_size_kb >= 1024 ? (model.file_size_kb / 1024).toFixed(2) + ' MB' : model.file_size_kb.toFixed(2) + ' KB'}`;
+  }
+
   // Initial load
   fetchSummary();
   fetchAlerts();
@@ -220,3 +444,4 @@ document.addEventListener("DOMContentLoaded", () => {
     fetchRecentDetections();
   }, 1500);
 });
+

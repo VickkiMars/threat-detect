@@ -258,3 +258,32 @@ code, kbd, samp, pre {
 ::-webkit-scrollbar-track { background: #f0f9ff; }
 ::-webkit-scrollbar-thumb { background: #bae6fd; border-radius: 9999px; }
 ::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
+
+/* Modal, Drawer & Enhanced Component Utilities */
+.fixed { position: fixed; }
+.inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
+.z-\[100\] { z-index: 100; }
+.backdrop-blur-xs { backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+.backdrop-blur-sm { backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.bg-slate-900\/40 { background-color: rgba(15, 23, 42, 0.4); }
+.bg-sky-100\/90 { background-color: rgba(224, 242, 254, 0.9); }
+.max-w-5xl { max-width: 64rem; }
+.max-w-4xl { max-width: 56rem; }
+.max-w-xs { max-width: 20rem; }
+.max-w-full { max-width: 100%; }
+.max-h-\[90vh\] { max-height: 90vh; }
+.max-h-\[340px\] { max-height: 340px; }
+.max-h-\[380px\] { max-height: 380px; }
+.rounded-3xl { border-radius: 1.5rem; }
+.shadow-2xl { box-shadow: 0 25px 50px -12px rgba(14, 165, 233, 0.25), 0 10px 20px -5px rgba(15, 23, 42, 0.1); }
+.hidden { display: none !important; }
+.space-y-3 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.75rem; }
+.space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.size-4 { width: 1rem; height: 1rem; }
+.size-8 { width: 2rem; height: 2rem; }
+.text-\[10px\] { font-size: 0.625rem; line-height: 0.75rem; }
+.text-sky-950 { color: #082f49; }
+.text-sky-800 { color: #075985; }
+.border-collapse { border-collapse: collapse; }
+
