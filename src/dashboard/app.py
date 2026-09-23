@@ -3,9 +3,10 @@ src/dashboard/app.py - Decoupled Flask Web Dashboard & Real-Time REST API
 Serves interactive SecOps monitoring interface and telemetry polling endpoints.
 """
 
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, send_from_directory
 from pathlib import Path
 import sys
+import json
 
 # Ensure src is importable
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -16,6 +17,9 @@ from src.database import (
     get_system_summary, get_recent_detections,
     get_unacknowledged_alerts, acknowledge_alert, get_latest_metrics
 )
+
+REPORTS_DIR = PROJECT_ROOT / "reports"
+FIGURES_DIR = REPORTS_DIR / "figures"
 
 app = Flask(
     __name__,
@@ -64,6 +68,27 @@ def api_system_metrics():
     """Returns rolling CPU %, Memory RSS MB, and throughput samples."""
     limit = min(int(request.args.get("limit", 30)), 60)
     return jsonify({"metrics": get_latest_metrics(limit=limit)})
+
+@app.route("/api/benchmarks")
+def api_benchmarks():
+    """Returns the dissertation academic evaluation benchmarks and model comparison matrix."""
+    summary_path = REPORTS_DIR / "evaluation_summary.json"
+    if summary_path.exists():
+        try:
+            with open(summary_path, "r") as f:
+                data = json.load(f)
+            return jsonify({"status": "success", "data": data})
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+    return jsonify({
+        "status": "pending",
+        "message": "Benchmarks have not been generated yet. Run python3 -m src.evaluate."
+    }), 404
+
+@app.route("/api/figures/<path:filename>")
+def api_figures(filename: str):
+    """Serves generated confusion matrix figures and evaluation diagrams."""
+    return send_from_directory(str(FIGURES_DIR), filename)
 
 def run_dashboard(host: str = SIMULATION_CONFIG["DASHBOARD_HOST"], port: int = SIMULATION_CONFIG["DASHBOARD_PORT"]):
     """Starts the Flask development web server."""
