@@ -273,7 +273,7 @@
             <h2 class="text-base sm:text-lg font-bold text-slate-900">Academic Model Benchmarks & Quantization Trade-offs</h2>
           </div>
           <p class="text-xs text-slate-500 mt-1">
-            Empirical evaluation replicating Table 11 & Table 12 on UNSW-NB15 benchmark splits (8,233 held-out test windows).
+            Empirical evaluation replicating Table 11 & Table 12 across UNSW-NB15 (8,233 test windows) and CICIDS2017 (2,622 test windows).
           </p>
         </div>
         <button id="btn-close-benchmarks" class="size-8 rounded-full bg-white hover:bg-sky-100 text-slate-600 hover:text-sky-800 flex items-center justify-center font-bold text-lg cursor-pointer transition-all shadow-xs" title="Close (Esc)">
@@ -326,6 +326,13 @@
         
         <!-- Tab 1: Table 12 (Comparative Baselines) -->
         <div id="tab-content-table12" class="space-y-3">
+          <!-- Dataset Filter Controls for Table 12 -->
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Benchmark Dataset:</span>
+            <button id="filter-all-table12" class="t12-filter-btn px-2.5 py-1 rounded-xl text-xs font-bold bg-sky-500 text-white cursor-pointer transition-all shadow-xs" data-filter="all">All Datasets (14)</button>
+            <button id="filter-unsw-table12" class="t12-filter-btn px-2.5 py-1 rounded-xl text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 cursor-pointer transition-all" data-filter="UNSW-NB15">UNSW-NB15 (7)</button>
+            <button id="filter-cicids-table12" class="t12-filter-btn px-2.5 py-1 rounded-xl text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 cursor-pointer transition-all" data-filter="CICIDS2017">CICIDS2017 (7)</button>
+          </div>
           <div class="overflow-x-auto rounded-2xl bg-slate-50 p-1 shadow-xs">
             <table class="w-full text-left text-xs">
               <thead class="bg-sky-100/90 text-sky-950 font-bold uppercase tracking-wider text-[11px]">
@@ -413,6 +420,13 @@
 
         <!-- Tab 4: Confusion Matrix Visual Viewer -->
         <div id="tab-content-cm" class="space-y-4 hidden">
+          <!-- Dataset Filter Controls for Confusion Matrices -->
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Filter Dataset:</span>
+            <button id="filter-all-cm" class="cm-dataset-filter-btn px-2.5 py-1 rounded-xl text-xs font-bold bg-sky-500 text-white cursor-pointer transition-all shadow-xs" data-cm-filter="all">All</button>
+            <button id="filter-unsw-cm" class="cm-dataset-filter-btn px-2.5 py-1 rounded-xl text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 cursor-pointer transition-all" data-cm-filter="UNSW-NB15">UNSW-NB15</button>
+            <button id="filter-cicids-cm" class="cm-dataset-filter-btn px-2.5 py-1 rounded-xl text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 cursor-pointer transition-all" data-cm-filter="CICIDS2017">CICIDS2017</button>
+          </div>
           <!-- Model Selection Pills -->
           <div class="flex flex-wrap items-center gap-2" id="cm-model-pills">
             <!-- Populated dynamically -->

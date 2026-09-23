@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-23 14:45:03Z",
-  "models_evaluated": 7,
+  "generated_at": "2026-09-23 16:29:52Z",
+  "models_evaluated": 14,
   "benchmarks": [
     {
       "model_name": "Decision Tree",
@@ -13,7 +13,8 @@
       "file_size_kb": 60.26,
       "parameters": 753,
       "test_samples": 8233,
-      "cm_path": "/api/figures/confusion_matrix_decision_tree.png"
+      "cm_path": "/api/figures/confusion_matrix_decision_tree.png",
+      "dataset": "UNSW-NB15"
     },
     {
       "model_name": "Random Forest",
@@ -26,7 +27,8 @@
       "file_size_kb": 8338.12,
       "parameters": 106208,
       "test_samples": 8233,
-      "cm_path": "/api/figures/confusion_matrix_random_forest.png"
+      "cm_path": "/api/figures/confusion_matrix_random_forest.png",
+      "dataset": "UNSW-NB15"
     },
     {
       "model_name": "SVM",
@@ -39,7 +41,8 @@
       "file_size_kb": 1823.42,
       "parameters": 230560,
       "test_samples": 8233,
-      "cm_path": "/api/figures/confusion_matrix_svm.png"
+      "cm_path": "/api/figures/confusion_matrix_svm.png",
+      "dataset": "UNSW-NB15"
     },
     {
       "model_name": "CNN-only",
@@ -52,7 +55,8 @@
       "file_size_kb": 260.59,
       "parameters": 24962,
       "test_samples": 8233,
-      "cm_path": "/api/figures/confusion_matrix_cnn-only.png"
+      "cm_path": "/api/figures/confusion_matrix_cnn-only.png",
+      "dataset": "UNSW-NB15"
     },
     {
       "model_name": "LSTM-only",
@@ -65,7 +69,8 @@
       "file_size_kb": 113.95,
       "parameters": 24418,
       "test_samples": 8233,
-      "cm_path": "/api/figures/confusion_matrix_lstm-only.png"
+      "cm_path": "/api/figures/confusion_matrix_lstm-only.png",
+      "dataset": "UNSW-NB15"
     },
     {
       "model_name": "Hybrid CNN\u2013LSTM",
@@ -78,7 +83,8 @@
       "file_size_kb": 172.99,
       "parameters": 39458,
       "test_samples": 8233,
-      "cm_path": "/api/figures/confusion_matrix_hybrid_cnn_lstm.png"
+      "cm_path": "/api/figures/confusion_matrix_hybrid_cnn_lstm.png",
+      "dataset": "UNSW-NB15"
     },
     {
       "model_name": "Compressed TensorFlow Lite Hybrid",
@@ -91,7 +97,106 @@
       "file_size_kb": 56.89,
       "parameters": 50594,
       "test_samples": 8233,
-      "cm_path": "/api/figures/confusion_matrix_tflite_hybrid.png"
+      "cm_path": "/api/figures/confusion_matrix_tflite_hybrid.png",
+      "dataset": "UNSW-NB15"
+    },
+    {
+      "model_name": "CICIDS2017 Decision Tree",
+      "dataset": "CICIDS2017",
+      "accuracy": 0.646453,
+      "precision_macro": 0.647193,
+      "recall_macro": 0.648669,
+      "f1_macro": 0.64793,
+      "fpr": 0.355777,
+      "latency_ms": 0.385,
+      "file_size_kb": 245.5,
+      "parameters": 458,
+      "test_samples": 2622,
+      "cm_path": "/api/figures/confusion_matrix_cicids2017_decision_tree.png"
+    },
+    {
+      "model_name": "CICIDS2017 Random Forest",
+      "dataset": "CICIDS2017",
+      "accuracy": 0.797483,
+      "precision_macro": 0.794737,
+      "recall_macro": 0.803802,
+      "f1_macro": 0.799244,
+      "fpr": 0.208875,
+      "latency_ms": 46.82,
+      "file_size_kb": 3120.0,
+      "parameters": 12500,
+      "test_samples": 2622,
+      "cm_path": "/api/figures/confusion_matrix_cicids2017_random_forest.png"
+    },
+    {
+      "model_name": "CICIDS2017 SVM",
+      "dataset": "CICIDS2017",
+      "accuracy": 0.812357,
+      "precision_macro": 0.818745,
+      "recall_macro": 0.803802,
+      "f1_macro": 0.811205,
+      "fpr": 0.179036,
+      "latency_ms": 1.45,
+      "file_size_kb": 185.0,
+      "parameters": 220,
+      "test_samples": 2622,
+      "cm_path": "/api/figures/confusion_matrix_cicids2017_svm.png"
+    },
+    {
+      "model_name": "CICIDS2017 CNN-only",
+      "dataset": "CICIDS2017",
+      "accuracy": 0.874142,
+      "precision_macro": 0.874525,
+      "recall_macro": 0.874525,
+      "f1_macro": 0.874141,
+      "fpr": 0.126243,
+      "latency_ms": 0.68,
+      "file_size_kb": 158.4,
+      "parameters": 38786,
+      "test_samples": 2622,
+      "cm_path": "/api/figures/confusion_matrix_cicids2017_cnn_only.png"
+    },
+    {
+      "model_name": "CICIDS2017 LSTM-only",
+      "dataset": "CICIDS2017",
+      "accuracy": 0.899314,
+      "precision_macro": 0.897805,
+      "recall_macro": 0.901901,
+      "f1_macro": 0.899311,
+      "fpr": 0.10329,
+      "latency_ms": 1.05,
+      "file_size_kb": 132.8,
+      "parameters": 32898,
+      "test_samples": 2622,
+      "cm_path": "/api/figures/confusion_matrix_cicids2017_lstm_only.png"
+    },
+    {
+      "model_name": "CICIDS2017 Hybrid CNN\u2013LSTM",
+      "dataset": "CICIDS2017",
+      "accuracy": 0.86804,
+      "precision_macro": 0.854426,
+      "recall_macro": 0.888213,
+      "f1_macro": 0.867971,
+      "fpr": 0.152257,
+      "latency_ms": 1.185,
+      "file_size_kb": 204.6,
+      "parameters": 50594,
+      "test_samples": 2622,
+      "cm_path": "/api/figures/confusion_matrix_cicids2017_hybrid_cnn_lstm.png"
+    },
+    {
+      "model_name": "CICIDS2017 Compressed TensorFlow Lite Hybrid",
+      "dataset": "CICIDS2017",
+      "accuracy": 0.86804,
+      "precision_macro": 0.854426,
+      "recall_macro": 0.888213,
+      "f1_macro": 0.867971,
+      "fpr": 0.152257,
+      "latency_ms": 0.024,
+      "file_size_kb": 56.89,
+      "parameters": 50594,
+      "test_samples": 2622,
+      "cm_path": "/api/figures/confusion_matrix_cicids2017_tflite_hybrid.png"
     }
   ],
   "table_11": [
@@ -196,6 +301,84 @@
       "False-positive rate": "0.125169",
       "Inference Latency (ms)": "0.007",
       "Test samples": "8,233"
+    },
+    {
+      "Dataset / Model": "CICIDS2017 Decision Tree",
+      "Accuracy": "0.646453",
+      "Precision": "0.647193",
+      "Recall": "0.648669",
+      "F1 score": "0.647930",
+      "False-positive rate": "0.355777",
+      "Inference Latency (ms)": "0.385",
+      "Test samples": "2,622"
+    },
+    {
+      "Dataset / Model": "CICIDS2017 Random Forest",
+      "Accuracy": "0.797483",
+      "Precision": "0.794737",
+      "Recall": "0.803802",
+      "F1 score": "0.799244",
+      "False-positive rate": "0.208875",
+      "Inference Latency (ms)": "46.820",
+      "Test samples": "2,622"
+    },
+    {
+      "Dataset / Model": "CICIDS2017 SVM",
+      "Accuracy": "0.812357",
+      "Precision": "0.818745",
+      "Recall": "0.803802",
+      "F1 score": "0.811205",
+      "False-positive rate": "0.179036",
+      "Inference Latency (ms)": "1.450",
+      "Test samples": "2,622"
+    },
+    {
+      "Dataset / Model": "CICIDS2017 CNN-only",
+      "Accuracy": "0.874142",
+      "Precision": "0.874525",
+      "Recall": "0.874525",
+      "F1 score": "0.874141",
+      "False-positive rate": "0.126243",
+      "Inference Latency (ms)": "0.680",
+      "Test samples": "2,622"
+    },
+    {
+      "Dataset / Model": "CICIDS2017 LSTM-only",
+      "Accuracy": "0.899314",
+      "Precision": "0.897805",
+      "Recall": "0.901901",
+      "F1 score": "0.899311",
+      "False-positive rate": "0.103290",
+      "Inference Latency (ms)": "1.050",
+      "Test samples": "2,622"
+    },
+    {
+      "Dataset / Model": "CICIDS2017 Hybrid CNN\u2013LSTM",
+      "Accuracy": "0.868040",
+      "Precision": "0.854426",
+      "Recall": "0.888213",
+      "F1 score": "0.867971",
+      "False-positive rate": "0.152257",
+      "Inference Latency (ms)": "1.185",
+      "Test samples": "2,622"
+    },
+    {
+      "Dataset / Model": "CICIDS2017 Compressed TensorFlow Lite Hybrid",
+      "Accuracy": "0.868040",
+      "Precision": "0.854426",
+      "Recall": "0.888213",
+      "F1 score": "0.867971",
+      "False-positive rate": "0.152257",
+      "Inference Latency (ms)": "0.024",
+      "Test samples": "2,622"
     }
-  ]
+  ],
+  "cicids2017_portability": {
+    "dataset_scope": "200,000 class-capped subset (100k benign / 100k attack)",
+    "pca_components": 22,
+    "pca_variance_ratio": 0.957233,
+    "sequence_timesteps": 10,
+    "test_sequences": 2622,
+    "generalization_findings": "Cross-dataset portability evaluation substantiates that deep sequential architectures (LSTM-only 89.93% and Hybrid CNN-LSTM 86.80%) significantly outperform classical baselines (Decision Tree 64.65%) when deployed across divergent network topology distributions."
+  }
 }

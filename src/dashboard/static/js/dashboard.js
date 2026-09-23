@@ -337,11 +337,121 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  let table12Filter = "all";
+  let cmFilter = "all";
+
+  function renderTable12Rows() {
+    if (!tbodyTable12 || !benchmarksDataCache) return;
+    const benchmarks = benchmarksDataCache.benchmarks || [];
+    const filtered = benchmarks.filter(m => {
+      if (table12Filter === "all") return true;
+      const ds = m.dataset || (m.model_name.startsWith("CICIDS2017") ? "CICIDS2017" : "UNSW-NB15");
+      return ds === table12Filter;
+    });
+
+    if (!filtered.length) {
+      tbodyTable12.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-slate-400 font-sans">No models matching filter: ${table12Filter}</td></tr>`;
+      return;
+    }
+
+    tbodyTable12.innerHTML = filtered.map(m => {
+      const isDeployed = m.model_name.includes("Lite") || m.model_name.includes("Compressed");
+      const rowBg = isDeployed ? "bg-sky-50 font-bold" : "hover:bg-slate-100/60";
+      const tag = isDeployed 
+        ? `<span class="ml-2 px-2 py-0.5 rounded-full text-[10px] bg-sky-500 text-white font-sans font-bold">Active Edge</span>` 
+        : "";
+      return `
+        <tr class="${rowBg} transition-colors">
+          <td class="px-3 py-2.5 text-slate-900 font-sans flex items-center">
+            ${m.model_name} ${tag}
+          </td>
+          <td class="px-2.5 py-2.5 ${(m.accuracy >= 0.90) ? 'text-sky-700 font-bold' : 'text-slate-800'} tabular-nums">
+            ${(m.accuracy * 100).toFixed(2)}%
+          </td>
+          <td class="px-2.5 py-2.5 text-slate-700 tabular-nums">${(m.precision_macro * 100).toFixed(2)}%</td>
+          <td class="px-2.5 py-2.5 text-slate-700 tabular-nums">${(m.recall_macro * 100).toFixed(2)}%</td>
+          <td class="px-2.5 py-2.5 text-slate-700 tabular-nums">${(m.f1_macro * 100).toFixed(2)}%</td>
+          <td class="px-2.5 py-2.5 ${(m.fpr <= 0.15) ? 'text-slate-900 font-semibold' : 'text-slate-500'} tabular-nums">${(m.fpr * 100).toFixed(2)}%</td>
+          <td class="px-2.5 py-2.5 ${(m.latency_ms < 1.0) ? 'text-sky-600 font-bold' : 'text-slate-700'} tabular-nums">${m.latency_ms.toFixed(3)} ms</td>
+          <td class="px-2.5 py-2.5 text-right ${(m.file_size_kb <= 150) ? 'text-sky-700 font-bold' : 'text-slate-700'} tabular-nums">${m.file_size_kb >= 1024 ? (m.file_size_kb / 1024).toFixed(1) + ' MB' : m.file_size_kb.toFixed(1) + ' KB'}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  function renderCmPills() {
+    if (!cmPillsContainer || !benchmarksDataCache) return;
+    const benchmarks = benchmarksDataCache.benchmarks || [];
+    const filtered = benchmarks.filter(m => {
+      if (cmFilter === "all") return true;
+      const ds = m.dataset || (m.model_name.startsWith("CICIDS2017") ? "CICIDS2017" : "UNSW-NB15");
+      return ds === cmFilter;
+    });
+
+    if (!filtered.length) {
+      cmPillsContainer.innerHTML = `<span class="text-xs text-slate-400">No figures available.</span>`;
+      return;
+    }
+
+    cmPillsContainer.innerHTML = filtered.map((m, idx) => {
+      const isDefault = idx === filtered.length - 1;
+      const activeClass = isDefault 
+        ? "bg-sky-500 text-white font-bold shadow-xs" 
+        : "bg-white text-slate-700 hover:bg-sky-50 font-semibold";
+      return `
+        <button 
+          data-filter-idx="${idx}" 
+          class="cm-model-pill px-3 py-1.5 rounded-xl text-xs transition-all cursor-pointer ${activeClass}">
+          ${m.model_name}
+        </button>
+      `;
+    }).join("");
+
+    // Wire pill clicks
+    cmPillsContainer.querySelectorAll(".cm-model-pill").forEach(pill => {
+      pill.addEventListener("click", () => {
+        const idx = parseInt(pill.getAttribute("data-filter-idx"), 10);
+        selectConfusionMatrix(filtered[idx], pill);
+      });
+    });
+
+    // Default select last pill in active view
+    const lastPill = cmPillsContainer.querySelector(`[data-filter-idx="${filtered.length - 1}"]`);
+    if (lastPill && filtered.length) {
+      selectConfusionMatrix(filtered[filtered.length - 1], lastPill);
+    }
+  }
+
+  // Setup dataset filter button listeners
+  function initDatasetFilters() {
+    document.querySelectorAll(".t12-filter-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        table12Filter = btn.getAttribute("data-filter");
+        document.querySelectorAll(".t12-filter-btn").forEach(b => {
+          b.className = "t12-filter-btn px-2.5 py-1 rounded-xl text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 cursor-pointer transition-all";
+        });
+        btn.className = "t12-filter-btn px-2.5 py-1 rounded-xl text-xs font-bold bg-sky-500 text-white cursor-pointer transition-all shadow-xs";
+        renderTable12Rows();
+      });
+    });
+
+    document.querySelectorAll(".cm-dataset-filter-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        cmFilter = btn.getAttribute("data-cm-filter");
+        document.querySelectorAll(".cm-dataset-filter-btn").forEach(b => {
+          b.className = "cm-dataset-filter-btn px-2.5 py-1 rounded-xl text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 cursor-pointer transition-all";
+        });
+        btn.className = "cm-dataset-filter-btn px-2.5 py-1 rounded-xl text-xs font-bold bg-sky-500 text-white cursor-pointer transition-all shadow-xs";
+        renderCmPills();
+      });
+    });
+  }
+
   function renderBenchmarks(data) {
     const benchmarks = data.benchmarks || [];
     
-    // Find deployed quantized model
-    const tfliteModel = benchmarks.find(b => b.model_name.includes("Lite") || b.model_name.includes("Compressed")) || benchmarks[benchmarks.length - 1];
+    // Find deployed quantized model (UNSW-NB15 TFLite active model)
+    const tfliteModel = benchmarks.find(b => (b.dataset === "UNSW-NB15" || !b.dataset) && (b.model_name.includes("Lite") || b.model_name.includes("Compressed"))) || benchmarks[0];
     if (tfliteModel) {
       const elAcc = document.getElementById("bench-accuracy");
       const elSize = document.getElementById("bench-size");
@@ -352,31 +462,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Render Table 12
-    if (tbodyTable12 && benchmarks.length) {
-      tbodyTable12.innerHTML = benchmarks.map(m => {
-        const isDeployed = m.model_name.includes("Lite") || m.model_name.includes("Compressed");
-        const rowBg = isDeployed ? "bg-sky-50 font-bold" : "hover:bg-slate-100/60";
-        const tag = isDeployed 
-          ? `<span class="ml-2 px-2 py-0.5 rounded-full text-[10px] bg-sky-500 text-white font-sans font-bold">Active Edge</span>` 
-          : "";
-        return `
-          <tr class="${rowBg} transition-colors">
-            <td class="px-3 py-2.5 text-slate-900 font-sans flex items-center">
-              ${m.model_name} ${tag}
-            </td>
-            <td class="px-2.5 py-2.5 ${(m.accuracy >= 0.92) ? 'text-sky-700 font-bold' : 'text-slate-800'} tabular-nums">
-              ${(m.accuracy * 100).toFixed(2)}%
-            </td>
-            <td class="px-2.5 py-2.5 text-slate-700 tabular-nums">${(m.precision_macro * 100).toFixed(2)}%</td>
-            <td class="px-2.5 py-2.5 text-slate-700 tabular-nums">${(m.recall_macro * 100).toFixed(2)}%</td>
-            <td class="px-2.5 py-2.5 text-slate-700 tabular-nums">${(m.f1_macro * 100).toFixed(2)}%</td>
-            <td class="px-2.5 py-2.5 ${(m.fpr <= 0.15) ? 'text-slate-900 font-semibold' : 'text-slate-500'} tabular-nums">${(m.fpr * 100).toFixed(2)}%</td>
-            <td class="px-2.5 py-2.5 ${(m.latency_ms < 1.0) ? 'text-sky-600 font-bold' : 'text-slate-700'} tabular-nums">${m.latency_ms.toFixed(3)} ms</td>
-            <td class="px-2.5 py-2.5 text-right ${(m.file_size_kb <= 150) ? 'text-sky-700 font-bold' : 'text-slate-700'} tabular-nums">${m.file_size_kb >= 1024 ? (m.file_size_kb / 1024).toFixed(1) + ' MB' : m.file_size_kb.toFixed(1) + ' KB'}</td>
-          </tr>
-        `;
-      }).join("");
-    }
+    renderTable12Rows();
 
     // Render Table 11
     const t11Data = data.table_11 || [];
@@ -441,35 +527,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Render Confusion Matrix Selection Pills
-    if (cmPillsContainer && benchmarks.length) {
-      cmPillsContainer.innerHTML = benchmarks.map((m, idx) => {
-        const isDefault = idx === benchmarks.length - 1; // default to TFLite
-        const activeClass = isDefault 
-          ? "bg-sky-500 text-white font-bold shadow-xs" 
-          : "bg-white text-slate-700 hover:bg-sky-50 font-semibold";
-        return `
-          <button 
-            data-index="${idx}" 
-            class="cm-model-pill px-3 py-1.5 rounded-xl text-xs transition-all cursor-pointer ${activeClass}">
-            ${m.model_name}
-          </button>
-        `;
-      }).join("");
-
-      // Add click listeners to pills
-      document.querySelectorAll(".cm-model-pill").forEach(pill => {
-        pill.addEventListener("click", () => {
-          const idx = parseInt(pill.getAttribute("data-index"), 10);
-          selectConfusionMatrix(benchmarks[idx], pill);
-        });
-      });
-
-      // Default select the last one (TFLite hybrid)
-      const lastPill = cmPillsContainer.querySelector(`[data-index="${benchmarks.length - 1}"]`);
-      if (lastPill) {
-        selectConfusionMatrix(benchmarks[benchmarks.length - 1], lastPill);
-      }
-    }
+    renderCmPills();
+    initDatasetFilters();
   }
 
   function selectConfusionMatrix(model, activePill) {
