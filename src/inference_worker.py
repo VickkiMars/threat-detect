@@ -26,10 +26,12 @@ class DetectionWorker:
     def __init__(
         self,
         model_path: Optional[Path] = None,
+        dataset_path: Optional[Path] = None,
         stream_rate: int = SIMULATION_CONFIG["DEFAULT_REPLAY_RATE"],
         max_windows: Optional[int] = None
     ):
         self.model_path = Path(model_path or TFLITE_MODEL_PATH)
+        self.dataset_path = Path(dataset_path) if dataset_path else None
         self.stream_rate = stream_rate
         self.max_windows = max_windows
         self.running = True
@@ -42,7 +44,11 @@ class DetectionWorker:
         # Initialize subcomponents
         print(f"[Worker] Initializing Edge Inference Engine ({self.model_path})...")
         self.engine = EdgeInferenceEngine(self.model_path, num_threads=1)
-        self.simulator = FlowStreamSimulator(rate_flows_per_sec=self.stream_rate, loop=True)
+        self.simulator = FlowStreamSimulator(
+            csv_path=self.dataset_path,
+            rate_flows_per_sec=self.stream_rate,
+            loop=True
+        )
         self.telemetry = TelemetrySampler()
         
         self.windows_processed = 0
@@ -130,12 +136,14 @@ class DetectionWorker:
 def main():
     parser = argparse.ArgumentParser(description="AI Network Threat Detection Worker")
     parser.add_argument("--model", type=str, default=str(TFLITE_MODEL_PATH), help="Path to .tflite model")
+    parser.add_argument("--dataset", type=str, default=None, help="Path to benchmark CSV dataset")
     parser.add_argument("--rate", type=int, default=SIMULATION_CONFIG["DEFAULT_REPLAY_RATE"], help="Arrival rate in flows/sec")
     parser.add_argument("--max-windows", type=int, default=None, help="Stop after N windows")
     args = parser.parse_args()
     
     worker = DetectionWorker(
         model_path=Path(args.model),
+        dataset_path=Path(args.dataset) if args.dataset else None,
         stream_rate=args.rate,
         max_windows=args.max_windows
     )

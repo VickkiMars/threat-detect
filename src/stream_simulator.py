@@ -71,13 +71,31 @@ class FlowStreamSimulator:
             else:
                 rep_row = df_window.iloc[-1]
                 
+            is_attack_ground_truth = int(rep_row.get("label", 0)) == 1
+
+            # Robust IP resolution for datasets without explicit packet IP headers
+            raw_src = rep_row.get("srcip")
+            if pd.isna(raw_src) or not str(raw_src).strip() or str(raw_src).lower() in ("nan", "none", "-"):
+                if is_attack_ground_truth:
+                    src_ip = f"198.51.100.{(window_id * 7) % 250 + 1}"
+                else:
+                    src_ip = f"10.0.0.{(window_id * 3) % 250 + 1}"
+            else:
+                src_ip = str(raw_src).strip()
+
+            raw_dst = rep_row.get("dstip")
+            if pd.isna(raw_dst) or not str(raw_dst).strip() or str(raw_dst).lower() in ("nan", "none", "-"):
+                dst_ip = "192.168.1.1" if is_attack_ground_truth else f"172.16.0.{(window_id % 12) + 1}"
+            else:
+                dst_ip = str(raw_dst).strip()
+
             metadata = {
-                "src_ip": str(rep_row.get("srcip", "192.168.1.100")),
-                "dst_ip": str(rep_row.get("dstip", "192.168.1.1")),
+                "src_ip": src_ip,
+                "dst_ip": dst_ip,
                 "protocol": str(rep_row.get("proto", "TCP")).upper(),
                 "service": str(rep_row.get("service", "-")),
                 "attack_cat": str(rep_row.get("attack_cat", "Normal")),
-                "ground_truth_attack": int(rep_row.get("label", 0))
+                "ground_truth_attack": int(is_attack_ground_truth)
             }
             
             yield window_id, sequence_tensor, metadata
@@ -86,3 +104,25 @@ class FlowStreamSimulator:
             # Rate-limiting sleep to simulate arrival rate
             if delay_per_window > 0:
                 time.sleep(delay_per_window)
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Network Flow Replay Stream Simulator")
+    parser.add_argument("--dataset", type=str, default=None, help="Path to benchmark CSV dataset")
+    parser.add_argument("--rate", type=int, default=SIMULATION_CONFIG["DEFAULT_REPLAY_RATE"], help="Flows per second")
+    parser.add_argument("--max-windows", type=int, default=10, help="Maximum windows to stream before stopping")
+    args = parser.parse_args()
+
+    simulator = FlowStreamSimulator(
+        csv_path=Path(args.dataset) if args.dataset else None,
+        rate_flows_per_sec=args.rate,
+        loop=True
+    )
+    print(f"Streaming from: {simulator.csv_path} at {simulator.rate_fps} flows/s")
+    for wid, tensor, meta in simulator.stream_windows():
+        print(f"[Window #{wid:04d}] Shape: {tensor.shape} | {meta['src_ip']} -> {meta['dst_ip']} ({meta['protocol']}) | Attack: {meta['ground_truth_attack']}")
+        if args.max_windows and wid >= args.max_windows:
+            break
+
+if __name__ == "__main__":
+    main()
