@@ -188,6 +188,21 @@ def acknowledge_alert(alert_id: int, db_path: Optional[Path] = None) -> bool:
     finally:
         conn.close()
 
+def acknowledge_all_alerts(db_path: Optional[Path] = None) -> int:
+    """Marks all currently active unacknowledged alerts as acknowledged."""
+    conn = get_connection(db_path)
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    try:
+        with conn:
+            cursor = conn.execute("""
+                UPDATE alert 
+                SET acknowledged = 1, acknowledged_at = ?
+                WHERE acknowledged = 0;
+            """, (now,))
+            return cursor.rowcount
+    finally:
+        conn.close()
+
 def record_metrics(
     cpu_percent: float,
     memory_rss_mb: float,

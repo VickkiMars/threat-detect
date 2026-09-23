@@ -190,21 +190,49 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Global acknowledge handler
+  // Global single acknowledge handler
   window.handleAcknowledge = async function(alertId) {
     try {
       const res = await fetch(`/api/alerts/${alertId}/acknowledge`, { method: "POST" });
       if (res.ok) {
+        lastAlertIds.delete(alertId);
         const card = document.getElementById(`alert-card-${alertId}`);
         if (card) {
           card.style.opacity = "0.2";
           card.style.transform = "scale(0.97)";
-          setTimeout(() => card.remove(), 200);
+          setTimeout(() => {
+            card.remove();
+            if (elAlertList && elAlertList.querySelectorAll("[id^='alert-card-']").length === 0) {
+              elAlertList.innerHTML = `
+                <div class="text-center py-12 text-slate-400 text-xs bg-sky-50/60 rounded-xl p-8">
+                  No unacknowledged security threats. Perimeter secure.
+                </div>`;
+            }
+          }, 200);
         }
         fetchSummary();
       }
     } catch (err) {
       console.error("Failed to acknowledge alert:", err);
+    }
+  };
+
+  // Global bulk acknowledge handler
+  window.handleAcknowledgeAll = async function() {
+    try {
+      const res = await fetch("/api/alerts/acknowledge_all", { method: "POST" });
+      if (res.ok) {
+        lastAlertIds.clear();
+        if (elAlertList) {
+          elAlertList.innerHTML = `
+            <div class="text-center py-12 text-slate-400 text-xs bg-sky-50/60 rounded-xl p-8">
+              No unacknowledged security threats. Perimeter secure.
+            </div>`;
+        }
+        fetchSummary();
+      }
+    } catch (err) {
+      console.error("Failed to acknowledge all alerts:", err);
     }
   };
 

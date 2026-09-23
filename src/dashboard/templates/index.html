@@ -142,8 +142,11 @@
                 {{ summary.unacknowledged_alerts }}
               </span>
             </h2>
+          <div class="flex items-center gap-2">
+            <button id="btn-ack-all" class="text-[11px] font-bold text-sky-700 hover:text-white bg-white hover:bg-sky-600 px-2.5 py-1 rounded-lg transition-all duration-150 cursor-pointer shadow-xs active:scale-95" onclick="handleAcknowledgeAll()" title="Acknowledge all pending threats">
+              Acknowledge All
+            </button>
           </div>
-          <span class="text-xs text-sky-700 font-mono">Live WebSocket/REST</span>
         </div>
 
         <!-- Alert Cards Container -->

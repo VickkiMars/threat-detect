@@ -15,7 +15,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.config import SIMULATION_CONFIG, NFR_TARGETS, DB_PATH
 from src.database import (
     get_system_summary, get_recent_detections,
-    get_unacknowledged_alerts, acknowledge_alert, get_latest_metrics
+    get_unacknowledged_alerts, acknowledge_alert, acknowledge_all_alerts,
+    get_latest_metrics
 )
 
 REPORTS_DIR = PROJECT_ROOT / "reports"
@@ -62,6 +63,12 @@ def api_acknowledge_alert(alert_id: int):
     if success:
         return jsonify({"status": "success", "alert_id": alert_id, "message": "Alert acknowledged."})
     return jsonify({"status": "error", "message": "Alert not found or already acknowledged."}), 404
+
+@app.route("/api/alerts/acknowledge_all", methods=["POST"])
+def api_acknowledge_all_alerts():
+    """Marks all unacknowledged security alerts as acknowledged in bulk."""
+    count = acknowledge_all_alerts()
+    return jsonify({"status": "success", "acknowledged_count": count, "message": f"{count} alerts acknowledged."})
 
 @app.route("/api/metrics/system")
 def api_system_metrics():
