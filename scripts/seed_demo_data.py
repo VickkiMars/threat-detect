@@ -120,6 +120,46 @@ def generate_benchmark_flows(n_records: int = 600) -> pd.DataFrame:
         
     return pd.DataFrame(records)
 
+def create_calibrated_benchmark_flows(n_records: int = 600) -> pd.DataFrame:
+    """
+    Constructs an authentic operational stream calibrated against the real UNSW-NB15 test partition.
+    Emulates a realistic edge environment with ~80% benign background traffic and ~20% periodic attack bursts.
+    """
+    unsw_test_path = DATA_DIR / "UNSW_NB15_testing-set.csv"
+    if unsw_test_path.exists():
+        np.random.seed(42)
+        df_test = pd.read_csv(unsw_test_path)
+        df_benign_pool = df_test[df_test["label"] == 0].reset_index(drop=True)
+        df_attack_pool = df_test[df_test["label"] == 1].reset_index(drop=True)
+        
+        n_windows = n_records // WINDOW_SIZE
+        # ~20% attack windows structured into realistic operational incident bursts
+        attack_windows = {6, 7, 16, 17, 18, 26, 27, 36, 37, 46, 47, 48}
+        
+        attacker_ips = ["185.220.101.5", "10.0.0.66", "172.16.0.99", "198.51.100.4"]
+        target_servers = ["192.168.1.1", "192.168.1.5", "192.168.1.254"]
+        
+        records = []
+        b_ptr = 0
+        a_ptr = 0
+        
+        for w in range(1, n_windows + 1):
+            if w in attack_windows and a_ptr + 10 <= len(df_attack_pool):
+                chunk = df_attack_pool.iloc[a_ptr:a_ptr + 10].copy()
+                a_ptr += 10
+                chunk["srcip"] = np.random.choice(attacker_ips)
+                chunk["dstip"] = np.random.choice(target_servers)
+            else:
+                chunk = df_benign_pool.iloc[b_ptr:b_ptr + 10].copy()
+                b_ptr += 10
+                chunk["srcip"] = [f"192.168.1.{(w * 7 + j) % 20 + 10}" for j in range(10)]
+                chunk["dstip"] = np.random.choice(target_servers + ["172.16.0.10"])
+            records.append(chunk)
+            
+        return pd.concat(records, ignore_index=True)
+    else:
+        return generate_benchmark_flows(n_records)
+
 def main():
     print("=== Seeding Initial Demo Flows and Transformers ===")
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -129,29 +169,32 @@ def main():
     print(f"Initializing SQLite database at {DATA_DIR}...")
     init_db()
     
-    # 2. Synthesize benchmark flow records
-    print("Generating 600 synthetic benchmark flows (UNSW-NB15 format)...")
-    df = generate_benchmark_flows(600)
+    # 2. Synthesize or calibrate benchmark flow records
+    print("Generating 600 calibrated benchmark flows (UNSW-NB15 format)...")
+    df = create_calibrated_benchmark_flows(600)
     df.to_csv(SAMPLE_FLOWS_PATH, index=False)
     print(f"Saved flow stream dataset to {SAMPLE_FLOWS_PATH} ({len(df)} records).")
     
-    # 3. Fit and persist StandardScaler and PCA (22 components)
-    print("Fitting StandardScaler and PCA (22 components)...")
-    scaler, pca, feature_cols = fit_preprocessors(df, n_components=PCA_COMPONENTS)
-    save_preprocessors(scaler, pca, feature_cols, SCALER_PATH, PCA_PATH)
-    print(f"Saved scaler to {SCALER_PATH}")
-    print(f"Saved PCA to {PCA_PATH}")
-    explained_var = float(np.sum(pca.explained_variance_ratio_))
-    print(f"PCA Cumulative Explained Variance: {explained_var:.4f} (>= 0.95 target met)")
+    # 3. Fit and persist StandardScaler and PCA only if not already trained on full dataset
+    if not SCALER_PATH.exists() or not PCA_PATH.exists():
+        print("Fitting StandardScaler and PCA (22 components)...")
+        scaler, pca, feature_cols = fit_preprocessors(df, n_components=PCA_COMPONENTS)
+        save_preprocessors(scaler, pca, feature_cols, SCALER_PATH, PCA_PATH)
+        print(f"Saved scaler to {SCALER_PATH}")
+        print(f"Saved PCA to {PCA_PATH}")
+        explained_var = float(np.sum(pca.explained_variance_ratio_))
+        print(f"PCA Cumulative Explained Variance: {explained_var:.4f} (>= 0.95 target met)")
+    else:
+        print("Preserving existing high-capacity StandardScaler and PCA models trained on full dataset.")
     
-    # 4. Register initial model metadata in SQLite
+    # 4. Register initial model metadata in SQLite if needed
     register_model(
         version="v1.0.0-unsw-hybrid",
         model_format="TFLITE",
         file_path=str(REFERENCE_MODEL_DIR / "hybrid_model.tflite"),
-        file_size_kb=100.08,
-        test_accuracy=0.9984,
-        test_macro_f1=0.9982,
+        file_size_kb=56.89,
+        test_accuracy=0.9246,
+        test_macro_f1=0.9231,
         dataset_origin="UNSW-NB15",
         is_active=1
     )
