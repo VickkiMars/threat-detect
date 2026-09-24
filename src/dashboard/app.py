@@ -20,7 +20,8 @@ from src.database import (
     init_db, get_system_summary, get_recent_detections,
     get_unacknowledged_alerts, get_alert_history,
     acknowledge_alert, acknowledge_all_alerts,
-    get_latest_metrics, get_active_model, log_detection
+    get_latest_metrics, get_active_model, log_detection,
+    clear_runtime_data
 )
 from src.inference_engine import EdgeInferenceEngine
 from src.stream_simulator import FlowStreamSimulator
@@ -87,13 +88,25 @@ class BackgroundSimulationManager:
             self.running = False
             return {"status": "paused", "running": False}
 
-    def reset(self):
+    def reset(self, clear_data: bool = True):
         with self.lock:
             self.running = False
             if self.simulator:
                 self.stream_generator = self.simulator.stream_windows()
             self.windows_processed = 0
-            return {"status": "reset", "running": False}
+            self.alerts_generated = 0
+            if clear_data:
+                try:
+                    clear_runtime_data(DB_PATH)
+                except Exception as e:
+                    print(f"[SimManager] Notice on clearing runtime data: {e}")
+            return {
+                "status": "reset",
+                "running": False,
+                "windows_processed": 0,
+                "alerts_generated": 0,
+                "message": "Simulation replay pointer and runtime logs reset successfully."
+            }
 
     def status(self):
         with self.lock:
@@ -210,8 +223,11 @@ def api_simulation_pause():
 
 @app.route("/api/simulation/reset", methods=["POST"])
 def api_simulation_reset():
-    """Resets network flow playback position and windows processed counter."""
-    return jsonify(sim_manager.reset())
+    """Resets network flow playback position, counters, and clears operational logs."""
+    clear_db = request.args.get("clear_db", "true").lower() in ("true", "1", "yes")
+    if request.is_json and request.json:
+        clear_db = request.json.get("clear_db", clear_db)
+    return jsonify(sim_manager.reset(clear_data=clear_db))
 
 @app.route("/api/detections/recent")
 def api_recent_detections():

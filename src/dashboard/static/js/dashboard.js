@@ -119,16 +119,74 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function handleSimReset() {
+    const resetIcon = btnSimReset ? btnSimReset.querySelector("svg") : null;
     try {
+      if (resetIcon) resetIcon.classList.add("animate-spin");
+      if (btnSimReset) btnSimReset.classList.add("bg-sky-100", "text-sky-800");
+
       const res = await fetch(`${API_BASE}/api/simulation/reset`, { method: "POST" });
       if (res.ok) {
         updateSimButtons(false);
         lastFlowId = 0;
-        fetchSummary();
-        fetchRecentDetections();
+        lastAlertIds.clear();
+
+        // Immediately zero KPI metrics in DOM
+        if (elTotalFlows) elTotalFlows.textContent = "0";
+        if (elBenignFlows) elBenignFlows.textContent = "0";
+        if (elThreats) elThreats.textContent = "0";
+        if (elAlertsCount) elAlertsCount.textContent = "0 Alerts";
+        if (elAlertBadge) elAlertBadge.textContent = "0";
+
+        // Reset live stream table to clean placeholder
+        if (elStreamBody) {
+          elStreamBody.innerHTML = `
+            <tr>
+              <td colspan="8" class="text-center py-12 text-slate-400 font-sans text-xs">
+                Flow stream replay pointer reset to Window #1. Operational logs purged. Click &ldquo;Start&rdquo; to begin live classification.
+              </td>
+            </tr>`;
+        }
+
+        // Reset alert lists
+        if (elAlertList) {
+          elAlertList.innerHTML = `
+            <div class="text-center py-12 text-slate-400 text-xs bg-sky-50/60 rounded-xl p-8">
+              No unacknowledged security threats. Perimeter secure.
+            </div>`;
+        }
+
+        if (elAlertHistoryList) {
+          elAlertHistoryList.innerHTML = `
+            <div class="text-center py-12 text-slate-400 text-xs bg-sky-50/60 rounded-xl p-8">
+              No historical resolved security threats recorded yet.
+            </div>`;
+        }
+
+        // Reset gauges
+        if (elThroughputVal) elThroughputVal.textContent = "0.0 fps";
+        if (elLatencyVal) elLatencyVal.textContent = "< 0.05 ms";
+        if (elLatencyBar) elLatencyBar.style.width = "2%";
+
+        // Brief banner update
+        if (elConnText) {
+          const originalText = elConnText.textContent;
+          elConnText.textContent = "Stream Reset";
+          setTimeout(() => {
+            elConnText.textContent = originalText;
+          }, 1500);
+        }
+
+        await fetchSummary();
       }
     } catch (err) {
       console.error("Simulation reset error:", err);
+    } finally {
+      if (resetIcon) {
+        setTimeout(() => {
+          resetIcon.classList.remove("animate-spin");
+          if (btnSimReset) btnSimReset.classList.remove("bg-sky-100", "text-sky-800");
+        }, 500);
+      }
     }
   }
 

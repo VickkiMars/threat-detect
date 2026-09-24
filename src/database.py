@@ -324,3 +324,22 @@ def get_system_summary(db_path: Optional[Path] = None) -> Dict[str, Any]:
         }
     finally:
         conn.close()
+
+def clear_runtime_data(db_path: Optional[Path] = None) -> None:
+    """
+    Clears operational runtime records (detection logs, alerts, and system metrics)
+    while strictly preserving registered models and schema integrity.
+    Inserts a clean baseline telemetry sample.
+    """
+    conn = get_connection(db_path)
+    try:
+        with conn:
+            conn.execute("DELETE FROM alert;")
+            conn.execute("DELETE FROM detection_log;")
+            conn.execute("DELETE FROM system_metrics;")
+    finally:
+        conn.close()
+    
+    # Seed clean baseline telemetry record
+    record_metrics(cpu_percent=0.0, memory_rss_mb=49.93, throughput_fps=0.0, host_status="NORMAL", db_path=db_path)
+
