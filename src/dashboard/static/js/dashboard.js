@@ -5,13 +5,31 @@
  */
 
 document.addEventListener("DOMContentLoaded", () => {
+  // API Host Resolution (adopted from Endurance)
+  const API_BASE = window.GRACE_API_BASE || `${location.protocol}//${location.host}`;
+
   // DOM Elements
+  const elConnBadge = document.getElementById("conn-badge");
+  const elConnDot = document.getElementById("conn-dot");
+  const elConnText = document.getElementById("conn-text");
+  const elHeaderUptime = document.getElementById("header-uptime");
+
+  const btnSimStart = document.getElementById("btn-sim-start");
+  const btnSimPause = document.getElementById("btn-sim-pause");
+  const btnSimReset = document.getElementById("btn-sim-reset");
+
   const elTotalFlows = document.getElementById("kpi-total-flows");
   const elBenignFlows = document.getElementById("kpi-benign-flows");
   const elThreats = document.getElementById("kpi-threats");
   const elAlertsCount = document.getElementById("kpi-alerts-count");
   const elAlertBadge = document.getElementById("alert-badge-count");
+  
+  const tabAlertsActive = document.getElementById("tab-alerts-active");
+  const tabAlertsHistory = document.getElementById("tab-alerts-history");
   const elAlertList = document.getElementById("alert-list");
+  const elAlertHistoryList = document.getElementById("alert-history-list");
+  const elAlertActionGroup = document.getElementById("alert-action-group");
+  
   const elStreamBody = document.getElementById("stream-table-body");
   
   const elCpuVal = document.getElementById("gauge-cpu-val");
@@ -19,39 +37,42 @@ document.addEventListener("DOMContentLoaded", () => {
   const elMemVal = document.getElementById("gauge-mem-val");
   const elMemBar = document.getElementById("gauge-mem-bar");
   const elThroughputVal = document.getElementById("gauge-throughput-val");
+  const elLatencyVal = document.getElementById("gauge-latency-val");
+  const elLatencyBar = document.getElementById("gauge-latency-bar");
 
   // State cache to avoid redundant DOM re-renders
   let lastAlertIds = new Set();
   let lastFlowId = 0;
+  let activeAlertTab = "active";
 
-  // Severity styling map strictly using Sky Blue, White, and Slate (Zero Borders)
+  // Threat Severity styling map adhering to industry SecOps red/orange standard
   const severityStyles = {
     CRITICAL: {
-      card: "bg-sky-600 text-white shadow-sm",
-      badge: "bg-white text-sky-800 font-extrabold",
-      ipText: "text-white font-bold",
-      metaText: "text-sky-100",
-      descText: "text-white font-medium",
-      btn: "bg-white text-sky-800 hover:bg-sky-50 font-bold"
+      card: "bg-rose-50 text-slate-900 shadow-xs hover:bg-rose-100/80",
+      badge: "bg-rose-600 text-white font-extrabold shadow-xs",
+      ipText: "text-rose-700 font-bold",
+      metaText: "text-rose-600 font-medium",
+      descText: "text-slate-800 font-medium",
+      btn: "bg-rose-600 text-white hover:bg-rose-700 font-bold"
     },
     HIGH: {
-      card: "bg-sky-500 text-white shadow-sm",
-      badge: "bg-sky-100 text-sky-800 font-bold",
-      ipText: "text-white font-bold",
-      metaText: "text-sky-100",
-      descText: "text-white font-medium",
-      btn: "bg-white text-sky-700 hover:bg-sky-50 font-bold"
+      card: "bg-orange-50 text-slate-900 shadow-xs hover:bg-orange-100/80",
+      badge: "bg-orange-600 text-white font-bold shadow-xs",
+      ipText: "text-orange-700 font-bold",
+      metaText: "text-orange-600 font-medium",
+      descText: "text-slate-800 font-medium",
+      btn: "bg-orange-600 text-white hover:bg-orange-700 font-bold"
     },
     MEDIUM: {
-      card: "bg-sky-100 text-slate-800 shadow-xs",
-      badge: "bg-sky-200 text-sky-900 font-bold",
-      ipText: "text-slate-900 font-bold",
-      metaText: "text-sky-700",
+      card: "bg-amber-50 text-slate-900 shadow-xs hover:bg-amber-100/80",
+      badge: "bg-amber-500 text-white font-bold shadow-xs",
+      ipText: "text-amber-800 font-bold",
+      metaText: "text-amber-700 font-medium",
       descText: "text-slate-700 font-medium",
-      btn: "bg-sky-600 text-white hover:bg-sky-700 font-bold"
+      btn: "bg-amber-600 text-white hover:bg-amber-700 font-bold"
     },
     LOW: {
-      card: "bg-slate-100 text-slate-800 shadow-xs",
+      card: "bg-slate-50 text-slate-800 shadow-xs hover:bg-slate-100",
       badge: "bg-slate-200 text-slate-700 font-semibold",
       ipText: "text-slate-900 font-bold",
       metaText: "text-slate-500",
@@ -60,11 +81,103 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
+  // Simulation Controls Handler
+  function updateSimButtons(isRunning) {
+    if (!btnSimStart || !btnSimPause) return;
+    if (isRunning) {
+      btnSimStart.className = "inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer bg-white text-sky-700 shadow-xs";
+      btnSimPause.className = "inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-slate-200 active:scale-95";
+    } else {
+      btnSimStart.className = "inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-slate-200 active:scale-95";
+      btnSimPause.className = "inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer bg-white text-amber-700 shadow-xs";
+    }
+  }
+
+  async function handleSimStart() {
+    try {
+      const res = await fetch(`${API_BASE}/api/simulation/start`, { method: "POST" });
+      if (res.ok) {
+        updateSimButtons(true);
+        fetchSummary();
+        fetchRecentDetections();
+      }
+    } catch (err) {
+      console.error("Simulation start error:", err);
+    }
+  }
+
+  async function handleSimPause() {
+    try {
+      const res = await fetch(`${API_BASE}/api/simulation/pause`, { method: "POST" });
+      if (res.ok) {
+        updateSimButtons(false);
+        fetchSummary();
+      }
+    } catch (err) {
+      console.error("Simulation pause error:", err);
+    }
+  }
+
+  async function handleSimReset() {
+    try {
+      const res = await fetch(`${API_BASE}/api/simulation/reset`, { method: "POST" });
+      if (res.ok) {
+        updateSimButtons(false);
+        lastFlowId = 0;
+        fetchSummary();
+        fetchRecentDetections();
+      }
+    } catch (err) {
+      console.error("Simulation reset error:", err);
+    }
+  }
+
+  if (btnSimStart) btnSimStart.addEventListener("click", handleSimStart);
+  if (btnSimPause) btnSimPause.addEventListener("click", handleSimPause);
+  if (btnSimReset) btnSimReset.addEventListener("click", handleSimReset);
+
+  // Alert Panel Tab Switcher
+  function switchAlertTab(targetTab) {
+    activeAlertTab = targetTab;
+    if (targetTab === "active") {
+      tabAlertsActive.className = "px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer bg-sky-500 text-white shadow-xs";
+      tabAlertsHistory.className = "px-2.5 py-1 rounded-md text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all cursor-pointer";
+      elAlertList.classList.remove("hidden");
+      elAlertHistoryList.classList.add("hidden");
+      if (elAlertActionGroup) elAlertActionGroup.classList.remove("hidden");
+      fetchAlerts();
+    } else {
+      tabAlertsHistory.className = "px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer bg-sky-500 text-white shadow-xs";
+      tabAlertsActive.className = "px-2.5 py-1 rounded-md text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all cursor-pointer";
+      elAlertList.classList.add("hidden");
+      elAlertHistoryList.classList.remove("hidden");
+      if (elAlertActionGroup) elAlertActionGroup.classList.add("hidden");
+      fetchAlertHistory();
+    }
+  }
+
+  if (tabAlertsActive) tabAlertsActive.addEventListener("click", () => switchAlertTab("active"));
+  if (tabAlertsHistory) tabAlertsHistory.addEventListener("click", () => switchAlertTab("history"));
+
   async function fetchSummary() {
     try {
-      const res = await fetch("/api/status");
-      if (!res.ok) return;
+      const res = await fetch(`${API_BASE}/api/status`);
+      if (!res.ok) throw new Error("Status failed");
       const data = await res.json();
+      
+      // Update connection indicator
+      if (elConnDot) elConnDot.className = "size-2 rounded-full bg-sky-500 animate-pulse";
+      if (elConnText) elConnText.textContent = "Perimeter Online";
+
+      // Uptime
+      if (elHeaderUptime && data.uptime) {
+        elHeaderUptime.textContent = data.uptime;
+      }
+
+      // Simulation status
+      if (data.simulation) {
+        updateSimButtons(data.simulation.running);
+      }
       
       elTotalFlows.textContent = Number(data.total_flows_processed || 0).toLocaleString();
       elBenignFlows.textContent = Number(data.benign_flows || 0).toLocaleString();
@@ -72,32 +185,34 @@ document.addEventListener("DOMContentLoaded", () => {
       
       const unackCount = data.unacknowledged_alerts || 0;
       elAlertsCount.textContent = `${unackCount} Alerts`;
-      elAlertBadge.textContent = unackCount;
+      if (elAlertBadge) elAlertBadge.textContent = unackCount;
       
       if (data.latest_telemetry) {
         const cpu = data.latest_telemetry.cpu_percent || 0;
         const mem = data.latest_telemetry.memory_rss_mb || 0;
         const tput = data.latest_telemetry.throughput_fps || 0;
         
-        elCpuVal.textContent = `${cpu.toFixed(1)}%`;
-        elCpuBar.style.width = `${Math.min(cpu, 100)}%`;
+        if (elCpuVal) elCpuVal.textContent = `${cpu.toFixed(1)}%`;
+        if (elCpuBar) elCpuBar.style.width = `${Math.min(cpu, 100)}%`;
         
-        elMemVal.textContent = `${mem.toFixed(1)} MB / 512 MB`;
+        if (elMemVal) elMemVal.textContent = `${mem.toFixed(1)} MB`;
         const memPct = Math.min((mem / 512.0) * 100, 100);
-        elMemBar.style.width = `${memPct}%`;
+        if (elMemBar) elMemBar.style.width = `${memPct}%`;
         
         if (elThroughputVal) {
           elThroughputVal.textContent = `${tput.toFixed(1)} flows/s`;
         }
       }
     } catch (err) {
-      console.warn("Telemetry fetch error:", err);
+      console.warn("Telemetry fetch warning:", err);
+      if (elConnDot) elConnDot.className = "size-2 rounded-full bg-red-500";
+      if (elConnText) elConnText.textContent = "Reconnecting...";
     }
   }
 
   async function fetchAlerts() {
     try {
-      const res = await fetch("/api/alerts/unacknowledged?limit=20");
+      const res = await fetch(`${API_BASE}/api/alerts/unacknowledged?limit=20`);
       if (!res.ok) return;
       const data = await res.json();
       const alerts = data.alerts || [];
@@ -143,9 +258,55 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  async function fetchAlertHistory() {
+    try {
+      const res = await fetch(`${API_BASE}/api/alerts/history?limit=30`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const alerts = data.alerts || [];
+
+      if (alerts.length === 0) {
+        elAlertHistoryList.innerHTML = `
+          <div class="text-center py-12 text-slate-400 text-xs bg-sky-50/60 rounded-xl p-8">
+            No historical resolved security threats recorded yet.
+          </div>`;
+        return;
+      }
+
+      elAlertHistoryList.innerHTML = alerts.map(a => {
+        const timePart = a.acknowledged_at ? a.acknowledged_at.split("T")[1]?.slice(0, 8) : "Triaged";
+        const badgeColor = a.severity === 'CRITICAL' ? 'bg-rose-100 text-rose-800 font-extrabold' :
+                           a.severity === 'HIGH' ? 'bg-orange-100 text-orange-800 font-bold' :
+                           a.severity === 'MEDIUM' ? 'bg-amber-100 text-amber-800 font-bold' :
+                           'bg-slate-200 text-slate-700 font-semibold';
+        return `
+          <div class="p-3.5 rounded-xl bg-slate-50 border-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-xs hover:bg-slate-100 transition-all duration-150">
+            <div class="space-y-1">
+              <div class="flex flex-wrap items-center gap-2 text-xs">
+                <span class="px-2 py-0.5 rounded text-[10px] uppercase ${badgeColor}">${a.severity}</span>
+                <span class="font-mono text-slate-800 font-semibold">${a.src_ip} &rarr; ${a.dst_ip}</span>
+                <span class="font-mono text-[11px] text-slate-500">(${a.protocol})</span>
+                <span class="text-[11px] text-slate-600 font-medium">${(a.confidence * 100).toFixed(1)}% conf</span>
+              </div>
+              <p class="text-xs text-slate-600">${a.message}</p>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0 text-right">
+              <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-100 text-emerald-800">
+                <svg class="size-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                Triaged (${timePart})
+              </span>
+            </div>
+          </div>
+        `;
+      }).join("");
+    } catch (err) {
+      console.warn("Alert history fetch error:", err);
+    }
+  }
+
   async function fetchRecentDetections() {
     try {
-      const res = await fetch("/api/detections/recent?limit=25");
+      const res = await fetch(`${API_BASE}/api/detections/recent?limit=25`);
       if (!res.ok) return;
       const data = await res.json();
       const detections = data.detections || [];
@@ -159,29 +320,41 @@ document.addEventListener("DOMContentLoaded", () => {
         return; // No new detections
       }
       lastFlowId = detections[0].flow_id;
+
+      // Update latency gauge with latest observed latency
+      if (elLatencyVal && detections[0].inference_latency_ms !== undefined) {
+        const lat = detections[0].inference_latency_ms;
+        elLatencyVal.textContent = `${lat.toFixed(3)} ms`;
+        if (elLatencyBar) {
+          const latPct = Math.min((lat / 50.0) * 100, 100);
+          elLatencyBar.style.width = `${Math.max(latPct, 2)}%`;
+        }
+      }
       
       elStreamBody.innerHTML = detections.map(d => {
         const isMalicious = d.predicted_class === 1;
         const pillStyle = isMalicious 
-          ? "bg-sky-600 text-white font-bold"
-          : "bg-sky-100 text-sky-800 font-semibold";
+          ? "bg-rose-600 text-white font-bold"
+          : "bg-slate-100 text-slate-700 font-semibold";
+        const rowBg = isMalicious ? "hover:bg-rose-50/50" : "hover:bg-slate-50";
+        const confText = isMalicious ? "text-rose-700 font-bold" : "text-slate-800 font-semibold";
         const pillText = isMalicious ? "MALICIOUS" : "BENIGN";
         const timeStr = d.timestamp.split("T")[1]?.slice(0, 8) || d.timestamp;
         
         return `
-          <tr class="hover:bg-sky-50 transition-colors duration-150">
+          <tr class="${rowBg} transition-colors duration-150">
             <td class="px-2.5 py-2 font-bold text-slate-900">#${d.window_sequence_id}</td>
             <td class="px-2 py-2 text-slate-500 font-mono text-[11px]">${timeStr}</td>
             <td class="px-2.5 py-2 text-slate-700 font-mono font-medium">${d.src_ip}</td>
             <td class="px-2.5 py-2 text-slate-700 font-mono font-medium">${d.dst_ip}</td>
-            <td class="px-2 py-2 text-slate-500 font-semibold">${d.protocol}</td>
+            <td class="px-2.5 py-2 text-slate-500 font-semibold">${d.protocol}</td>
             <td class="px-2.5 py-2">
               <span class="px-2 py-0.5 rounded-full text-[10px] tracking-wider uppercase ${pillStyle}">
                 ${pillText}
               </span>
             </td>
-            <td class="px-2.5 py-2 text-slate-800 font-semibold tabular-nums">${(d.confidence * 100).toFixed(1)}%</td>
-            <td class="px-2.5 py-2 text-sky-600 font-mono font-bold tabular-nums text-right">${d.inference_latency_ms.toFixed(3)} ms</td>
+            <td class="px-2.5 py-2 ${confText} tabular-nums">${(d.confidence * 100).toFixed(1)}%</td>
+            <td class="px-2.5 py-2 text-slate-700 font-mono font-medium tabular-nums text-right">${d.inference_latency_ms.toFixed(3)} ms</td>
           </tr>
         `;
       }).join("");
@@ -193,7 +366,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Global single acknowledge handler
   window.handleAcknowledge = async function(alertId) {
     try {
-      const res = await fetch(`/api/alerts/${alertId}/acknowledge`, { method: "POST" });
+      const res = await fetch(`${API_BASE}/api/alerts/${alertId}/acknowledge`, { method: "POST" });
       if (res.ok) {
         lastAlertIds.delete(alertId);
         const card = document.getElementById(`alert-card-${alertId}`);
@@ -220,7 +393,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Global bulk acknowledge handler
   window.handleAcknowledgeAll = async function() {
     try {
-      const res = await fetch("/api/alerts/acknowledge_all", { method: "POST" });
+      const res = await fetch(`${API_BASE}/api/alerts/acknowledge_all`, { method: "POST" });
       if (res.ok) {
         lastAlertIds.clear();
         if (elAlertList) {
@@ -319,7 +492,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
-      const res = await fetch("/api/benchmarks");
+      const res = await fetch(`${API_BASE}/api/benchmarks`);
       if (!res.ok) {
         tbodyTable12.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400 font-sans">No benchmark records found. Run python3 -m src.evaluate.</td></tr>`;
         return;
@@ -573,8 +746,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // Polling loop every 1.5 seconds
   setInterval(() => {
     fetchSummary();
-    fetchAlerts();
+    if (activeAlertTab === "active") {
+      fetchAlerts();
+    } else {
+      fetchAlertHistory();
+    }
     fetchRecentDetections();
   }, 1500);
 });
+
 

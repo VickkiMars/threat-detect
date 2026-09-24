@@ -261,6 +261,23 @@ def get_unacknowledged_alerts(limit: int = 50, db_path: Optional[Path] = None) -
     finally:
         conn.close()
 
+def get_alert_history(limit: int = 50, db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
+    """Retrieves acknowledged security alerts sorted by resolution recency."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.execute("""
+            SELECT a.alert_id, a.flow_id, a.severity, a.message, a.acknowledged, a.created_at, a.acknowledged_at,
+                   d.src_ip, d.dst_ip, d.confidence, d.protocol
+            FROM alert a
+            JOIN detection_log d ON a.flow_id = d.flow_id
+            WHERE a.acknowledged = 1
+            ORDER BY a.acknowledged_at DESC, a.alert_id DESC
+            LIMIT ?;
+        """, (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
 def get_latest_metrics(limit: int = 30, db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
     """Retrieves the most recent system metrics for charting."""
     conn = get_connection(db_path)

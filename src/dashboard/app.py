@@ -1,26 +1,168 @@
 """
 src/dashboard/app.py - Decoupled Flask Web Dashboard & Real-Time REST API
-Serves interactive SecOps monitoring interface and telemetry polling endpoints.
+Serves interactive SecOps monitoring interface, telemetry polling endpoints,
+and embedded background simulation controller.
 """
 
 from flask import Flask, render_template, jsonify, request, send_from_directory
 from pathlib import Path
 import sys
 import json
+import time
+import threading
 
 # Ensure src is importable
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.config import SIMULATION_CONFIG, NFR_TARGETS, DB_PATH
+from src.config import SIMULATION_CONFIG, NFR_TARGETS, DB_PATH, TFLITE_MODEL_PATH, SAMPLE_FLOWS_PATH
 from src.database import (
-    get_system_summary, get_recent_detections,
-    get_unacknowledged_alerts, acknowledge_alert, acknowledge_all_alerts,
-    get_latest_metrics
+    init_db, get_system_summary, get_recent_detections,
+    get_unacknowledged_alerts, get_alert_history,
+    acknowledge_alert, acknowledge_all_alerts,
+    get_latest_metrics, get_active_model, log_detection
 )
+from src.inference_engine import EdgeInferenceEngine
+from src.stream_simulator import FlowStreamSimulator
+from src.alert_manager import handle_malicious_detection
+from src.telemetry import TelemetrySampler
 
 REPORTS_DIR = PROJECT_ROOT / "reports"
 FIGURES_DIR = REPORTS_DIR / "figures"
+SERVER_START_TIME = time.time()
+
+def get_uptime_str() -> str:
+    """Returns elapsed service uptime formatted as hh:mm:ss."""
+    elapsed = int(time.time() - SERVER_START_TIME)
+    hours, rem = divmod(elapsed, 3600)
+    minutes, seconds = divmod(rem, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+class BackgroundSimulationManager:
+    """Thread-safe simulation controller embedded within Flask backend."""
+    
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.running = False
+        self.stream_generator = None
+        self.simulator = None
+        self.engine = None
+        self.telemetry = None
+        self.model_id = 1
+        self.windows_processed = 0
+        self.alerts_generated = 0
+        self.thread = None
+        self._init_components()
+
+    def _init_components(self):
+        try:
+            init_db()
+            active_rec = get_active_model()
+            self.model_id = active_rec["model_id"] if active_rec else 1
+            if TFLITE_MODEL_PATH.exists():
+                self.engine = EdgeInferenceEngine(TFLITE_MODEL_PATH, num_threads=1)
+            if SAMPLE_FLOWS_PATH.exists():
+                self.simulator = FlowStreamSimulator(
+                    csv_path=SAMPLE_FLOWS_PATH,
+                    rate_flows_per_sec=SIMULATION_CONFIG["DEFAULT_REPLAY_RATE"],
+                    loop=True
+                )
+                self.stream_generator = self.simulator.stream_windows()
+            self.telemetry = TelemetrySampler()
+        except Exception as e:
+            print(f"[SimManager] Initialization notice: {e}")
+
+    def start(self):
+        with self.lock:
+            if self.running:
+                return {"status": "already_running", "running": True}
+            self.running = True
+            if self.thread is None or not self.thread.is_alive():
+                self.thread = threading.Thread(target=self._run_loop, daemon=True)
+                self.thread.start()
+            return {"status": "started", "running": True}
+
+    def pause(self):
+        with self.lock:
+            self.running = False
+            return {"status": "paused", "running": False}
+
+    def reset(self):
+        with self.lock:
+            self.running = False
+            if self.simulator:
+                self.stream_generator = self.simulator.stream_windows()
+            self.windows_processed = 0
+            return {"status": "reset", "running": False}
+
+    def status(self):
+        with self.lock:
+            return {
+                "running": self.running,
+                "windows_processed": self.windows_processed,
+                "alerts_generated": self.alerts_generated,
+                "stream_rate_fps": self.simulator.rate_fps if self.simulator else SIMULATION_CONFIG.get("DEFAULT_REPLAY_RATE", 100)
+            }
+
+    def _run_loop(self):
+        last_telemetry_time = time.time()
+        while True:
+            if not self.running:
+                time.sleep(0.2)
+                continue
+
+            if not self.engine or not self.simulator or not self.stream_generator:
+                time.sleep(0.5)
+                continue
+
+            try:
+                window_id, sequence_tensor, metadata = next(self.stream_generator)
+                pred_class, confidence, latency_ms = self.engine.predict_window(sequence_tensor)
+                
+                with self.lock:
+                    self.windows_processed += 1
+
+                flow_id = log_detection(
+                    model_id=self.model_id,
+                    src_ip=metadata["src_ip"],
+                    dst_ip=metadata["dst_ip"],
+                    protocol=metadata["protocol"],
+                    predicted_class=pred_class,
+                    confidence=confidence,
+                    window_sequence_id=window_id,
+                    latency_ms=latency_ms
+                )
+
+                if pred_class == 1:
+                    handle_malicious_detection(
+                        flow_id=flow_id,
+                        confidence=confidence,
+                        src_ip=metadata["src_ip"],
+                        dst_ip=metadata["dst_ip"],
+                        protocol=metadata["protocol"],
+                        window_id=window_id
+                    )
+                    with self.lock:
+                        self.alerts_generated += 1
+
+                now = time.time()
+                if now - last_telemetry_time >= SIMULATION_CONFIG.get("TELEMETRY_INTERVAL_SEC", 1.0):
+                    if self.telemetry:
+                        self.telemetry.sample(current_flow_count=self.windows_processed * 10)
+                    last_telemetry_time = now
+
+                delay = float(self.simulator.window_size) / float(self.simulator.rate_fps)
+                time.sleep(delay)
+            except StopIteration:
+                if self.simulator and self.simulator.loop:
+                    self.stream_generator = self.simulator.stream_windows()
+                else:
+                    self.running = False
+            except Exception as e:
+                print(f"[SimManager] Loop warning: {e}")
+                time.sleep(0.5)
+
+sim_manager = BackgroundSimulationManager()
 
 app = Flask(
     __name__,
@@ -32,6 +174,9 @@ app = Flask(
 def index():
     """Renders the main SecOps threat detection dashboard."""
     summary = get_system_summary()
+    summary["uptime"] = get_uptime_str()
+    summary["uptime_seconds"] = int(time.time() - SERVER_START_TIME)
+    summary["simulation"] = sim_manager.status()
     return render_template(
         "index.html",
         summary=summary,
@@ -41,8 +186,32 @@ def index():
 
 @app.route("/api/status")
 def api_status():
-    """Returns aggregated system status and counter metrics."""
-    return jsonify(get_system_summary())
+    """Returns aggregated system status, uptime, and simulation metrics."""
+    summary = get_system_summary()
+    summary["uptime"] = get_uptime_str()
+    summary["uptime_seconds"] = int(time.time() - SERVER_START_TIME)
+    summary["simulation"] = sim_manager.status()
+    return jsonify(summary)
+
+@app.route("/api/simulation/status")
+def api_simulation_status():
+    """Returns live playback state of the stream simulator."""
+    return jsonify(sim_manager.status())
+
+@app.route("/api/simulation/start", methods=["POST"])
+def api_simulation_start():
+    """Starts or resumes background network flow streaming."""
+    return jsonify(sim_manager.start())
+
+@app.route("/api/simulation/pause", methods=["POST"])
+def api_simulation_pause():
+    """Pauses background network flow streaming."""
+    return jsonify(sim_manager.pause())
+
+@app.route("/api/simulation/reset", methods=["POST"])
+def api_simulation_reset():
+    """Resets network flow playback position and windows processed counter."""
+    return jsonify(sim_manager.reset())
 
 @app.route("/api/detections/recent")
 def api_recent_detections():
@@ -55,6 +224,12 @@ def api_unacknowledged_alerts():
     """Returns all active, unacknowledged security threat alerts."""
     limit = min(int(request.args.get("limit", 50)), 100)
     return jsonify({"alerts": get_unacknowledged_alerts(limit=limit)})
+
+@app.route("/api/alerts/history")
+def api_alert_history():
+    """Returns acknowledged security threat alerts for audit trail."""
+    limit = min(int(request.args.get("limit", 50)), 100)
+    return jsonify({"alerts": get_alert_history(limit=limit)})
 
 @app.route("/api/alerts/<int:alert_id>/acknowledge", methods=["POST"])
 def api_acknowledge_alert(alert_id: int):

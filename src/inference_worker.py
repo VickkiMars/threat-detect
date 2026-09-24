@@ -54,9 +54,12 @@ class DetectionWorker:
         self.windows_processed = 0
         self.alerts_generated = 0
         
-        # Register signals for graceful termination
-        signal.signal(signal.SIGINT, self._handle_shutdown)
-        signal.signal(signal.SIGTERM, self._handle_shutdown)
+        # Register signals for graceful termination if running on main thread
+        try:
+            signal.signal(signal.SIGINT, self._handle_shutdown)
+            signal.signal(signal.SIGTERM, self._handle_shutdown)
+        except ValueError:
+            pass
         
     def _handle_shutdown(self, signum, frame):
         print("\n[Worker] Graceful shutdown signal received. Halting detection worker...")

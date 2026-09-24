@@ -73,3 +73,45 @@ def test_api_system_metrics(client):
     data = res.get_json()
     assert "metrics" in data
     assert isinstance(data["metrics"], list)
+
+def test_api_simulation_controls(client):
+    # Status
+    res = client.get("/api/simulation/status")
+    assert res.status_code == 200
+    assert "running" in res.get_json()
+    
+    # Start
+    res_start = client.post("/api/simulation/start")
+    assert res_start.status_code == 200
+    assert res_start.get_json()["running"] is True
+    
+    # Pause
+    res_pause = client.post("/api/simulation/pause")
+    assert res_pause.status_code == 200
+    assert res_pause.get_json()["running"] is False
+    
+    # Reset
+    res_reset = client.post("/api/simulation/reset")
+    assert res_reset.status_code == 200
+    assert res_reset.get_json()["status"] == "reset"
+
+def test_api_alert_history(client):
+    # Log flow and alert, then acknowledge it
+    flow_id = log_detection(
+        model_id=1,
+        src_ip="192.168.1.50",
+        dst_ip="192.168.1.1",
+        protocol="UDP",
+        predicted_class=1,
+        confidence=0.95,
+        window_sequence_id=1001,
+        latency_ms=0.04
+    )
+    alert_id = create_alert(flow_id, "HIGH", "Test Alert for History")
+    client.post(f"/api/alerts/{alert_id}/acknowledge")
+    
+    res = client.get("/api/alerts/history")
+    assert res.status_code == 200
+    alerts = res.get_json()["alerts"]
+    assert any(a["alert_id"] == alert_id for a in alerts)
+
