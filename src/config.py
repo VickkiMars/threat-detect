@@ -3,14 +3,28 @@ src/config.py - Central Configuration for Edge Threat Detection System
 Defines paths, resource ceilings, model hyperparameters, and severity brackets.
 """
 
+import os
 from pathlib import Path
+
+# Serverless Execution Detection (Vercel / AWS Lambda)
+IS_SERVERLESS = bool(
+    os.environ.get("VERCEL")
+    or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+    or os.environ.get("SERVERLESS")
+)
 
 # Base Paths
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 MODELS_DIR = PROJECT_ROOT / "models"
-LOGS_DIR = PROJECT_ROOT / "logs"
-DB_PATH = DATA_DIR / "threat_detection.db"
+
+if IS_SERVERLESS:
+    LOGS_DIR = Path("/tmp/logs")
+    DB_PATH = Path("/tmp/threat_detection.db")
+else:
+    LOGS_DIR = PROJECT_ROOT / "logs"
+    DB_PATH = DATA_DIR / "threat_detection.db"
+
 SAMPLE_FLOWS_PATH = DATA_DIR / "sample_flows.csv"
 
 # Preprocessing & Model Architecture Constants
