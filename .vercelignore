@@ -1,0 +1,35 @@
+# Virtual environments and dependencies
+.venv/
+venv/
+ENV/
+env/
+
+# Version control & cache
+.git/
+.gitignore
+.pytest_cache/
+__pycache__/
+*/__pycache__/
+*/*/__pycache__/
+*.pyc
+
+# Heavy training datasets (keep only sample_flows.csv and pre-seeded SQLite db)
+data/UNSW_NB15_*.csv
+data/*.zip
+data/*.tar.gz
+
+# Model training checkpoints (keep only models/reference/)
+models/checkpoints/
+
+# Documentation and Word thesis documents
+docs/
+*.docx
+DISSERTATION_TECHNICAL_REPORT.md
+
+# Unit & integration tests
+tests/
+pytest.ini
+
+# Logs
+logs/
+*.log
