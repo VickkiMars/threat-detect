@@ -295,6 +295,11 @@ def api_figures(filename: str):
     """Serves generated confusion matrix figures and evaluation diagrams."""
     return send_from_directory(str(FIGURES_DIR), filename)
 
+@app.route("/favicon.ico")
+def api_favicon():
+    """Serves brand favicon to eliminate browser 404 console errors."""
+    return send_from_directory(str(Path(__file__).parent / "static"), "favicon.svg", mimetype="image/svg+xml")
+
 def run_dashboard(host: str = None, port: int = None):
     """Starts the Flask development web server."""
     import os
