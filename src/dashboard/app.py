@@ -295,8 +295,13 @@ def api_figures(filename: str):
     """Serves generated confusion matrix figures and evaluation diagrams."""
     return send_from_directory(str(FIGURES_DIR), filename)
 
-def run_dashboard(host: str = SIMULATION_CONFIG["DASHBOARD_HOST"], port: int = SIMULATION_CONFIG["DASHBOARD_PORT"]):
+def run_dashboard(host: str = None, port: int = None):
     """Starts the Flask development web server."""
+    import os
+    if host is None:
+        host = os.environ.get("FLASK_RUN_HOST", SIMULATION_CONFIG["DASHBOARD_HOST"])
+    if port is None:
+        port = int(os.environ.get("FLASK_RUN_PORT", SIMULATION_CONFIG["DASHBOARD_PORT"]))
     print("==================================================================")
     print(" AI NETWORK THREAT MONITORING DASHBOARD (FLASK DECOUPLED SERVICE)")
     print(f" URL             : http://{host}:{port}")

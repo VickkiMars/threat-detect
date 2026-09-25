@@ -112,23 +112,35 @@ All agile engineering documents, formal specifications, and architecture decisio
 
 ---
 
-## 5. Quick Start: Running Under Simulation
+## 5. Quick Start: Single-Command Startup & Simulation
 
-### 5.1 Environment Setup
+### 5.1 One-Command Startup
+To automatically set up the virtual environment, verify reference models, and launch the web dashboard:
+```bash
+# Standard local startup
+./start.sh
+
+# Or under edge resource simulation (CPU Core 0 pinning & 2GB memory ceiling)
+./start.sh --simulated
+```
+Access the operational dashboard at: **http://127.0.0.1:5000**
+
+Available flags:
+- `./start.sh`: Standard local dashboard run.
+- `./start.sh --simulated` (or `-s`): Run under simulated Raspberry Pi hardware constraints.
+- `./start.sh --with-worker` (or `-w`): Launch the decoupled detection worker alongside the dashboard.
+- `./start.sh --port <port>`: Bind to a custom port.
+
+### 5.2 Manual Environment Setup
 ```bash
 # Clone or navigate to project directory
 cd /home/kami/Desktop/codebase/Grace
 
-# Create Python virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Upgrade pip and install runtime dependencies
-pip install --upgrade pip
-pip install numpy pandas scikit-learn imbalanced-learn flask psutil
+# Automated setup script
+./setup_env.sh
 ```
 
-### 5.2 Launching the Simulated Benchmark (Chapter 4.10.2 Command)
+### 5.3 Launching the Simulated Benchmark (Chapter 4.10.2 Command)
 ```bash
 taskset --cpu-list 0 systemd-run --user --scope \
   -p MemoryMax=2G \
