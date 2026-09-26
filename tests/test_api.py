@@ -19,6 +19,17 @@ def test_get_index_page(client):
     assert res.status_code == 200
     assert b"AI Network Threat Detection Gateway" in res.data
     assert b"psutil" in res.data
+    assert b"/benchmarks" in res.data
+    assert b"benchmarks-modal" not in res.data
+
+def test_get_benchmarks_page(client):
+    res = client.get("/benchmarks")
+    assert res.status_code == 200
+    assert b"Academic Model Benchmarks" in res.data
+    assert b"Table 12" in res.data
+    assert b"Table 11" in res.data
+    assert b"Table 13" in res.data
+    assert b"benchmarks.js" in res.data
 
 def test_api_status_endpoint(client):
     res = client.get("/api/status")

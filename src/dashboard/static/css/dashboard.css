@@ -42,12 +42,18 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
 code, kbd, samp, pre {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
 /* Layout Utilities */
 .flex { display: flex; }
+.inline-flex { display: inline-flex; }
 .flex-col { flex-direction: column; }
 .flex-wrap { flex-wrap: wrap; }
 .flex-1 { flex: 1 1 0%; }
@@ -109,6 +115,12 @@ code, kbd, samp, pre {
 .h-full { height: 100%; }
 .size-2 { width: 0.5rem; height: 0.5rem; }
 .size-2\.5 { width: 0.625rem; height: 0.625rem; }
+.size-3 { width: 0.75rem; height: 0.75rem; }
+.size-3\.5 { width: 0.875rem; height: 0.875rem; }
+.size-4 { width: 1rem; height: 1rem; }
+.size-5 { width: 1.25rem; height: 1.25rem; }
+.size-6 { width: 1.5rem; height: 1.5rem; }
+.size-8 { width: 2rem; height: 2rem; }
 .size-10 { width: 2.5rem; height: 2.5rem; }
 .size-11 { width: 2.75rem; height: 2.75rem; }
 

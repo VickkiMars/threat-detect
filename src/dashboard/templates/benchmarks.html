@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Academic Benchmarks &amp; Evaluation — Grace NIDS</title>
+  <meta name="description" content="Empirical Academic Benchmarks, Quantization Trade-offs, Edge Hardware Feasibility, and Confusion Matrix Diagnostics for Grace NIDS.">
+  
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+</head>
+<body class="bg-canvas text-slate-900 font-sans antialiased min-h-screen flex flex-col selection:bg-sky-500 selection:text-white">
+
+  <!-- Top Navigation & System Status Banner -->
+  <header class="sticky top-0 z-50 bg-white/90 backdrop-blur-md px-4 sm:px-8 py-3.5 shadow-xs">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      
+      <!-- Brand & Project Identity -->
+      <a href="/" class="flex items-center gap-3.5 group cursor-pointer" title="Return to Live Monitor">
+        <div class="size-11 bg-sky-500 group-hover:bg-sky-600 rounded-xl flex items-center justify-center font-bold text-white text-xl shrink-0 shadow-sm transition-all" aria-hidden="true">
+          &Sigma;
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-bold tracking-tight text-slate-900 flex items-center gap-2">
+            AI Network Threat Detection Gateway
+            <span class="text-xs px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-700 font-semibold">B.Sc. Research</span>
+          </h1>
+          <p class="text-xs text-slate-500">Edge-Class Simulation Platform &bull; Department of Computer Science, University of Uyo</p>
+        </div>
+      </a>
+
+      <!-- Primary Page Navigation Switcher -->
+      <nav class="flex items-center bg-slate-100 p-1 rounded-xl gap-1 shadow-xs" aria-label="Page Navigation">
+        <a href="/" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-200 transition-all cursor-pointer">
+          <svg class="size-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+          Live Monitor
+        </a>
+        <a href="/benchmarks" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-sky-700 shadow-xs cursor-pointer">
+          <svg class="size-3.5 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          Academic Benchmarks
+        </a>
+      </nav>
+
+      <!-- Live Environment Status Badges -->
+      <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+        <!-- Connection Badge -->
+        <div class="inline-flex items-center gap-2 rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-800 shadow-xs">
+          <span class="size-2 rounded-full bg-sky-500 animate-pulse"></span>
+          <span>Perimeter Online</span>
+        </div>
+
+        <!-- Service Uptime Badge -->
+        <div class="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 font-mono text-xs text-slate-700 shadow-xs">
+          <span class="text-slate-400 font-sans font-medium text-[10px] uppercase">Uptime:</span>
+          <span class="font-bold text-sky-800 tabular-nums">{{ summary.uptime or '00:00:00' }}</span>
+        </div>
+
+        <!-- Hardware Isolation Badge -->
+        <div class="rounded-lg bg-slate-100 px-2.5 py-1 font-mono text-xs text-slate-700 shadow-xs hidden md:inline-flex">
+          CPU: Core 0 Pinned &bull; 2GB Ceil
+        </div>
+        
+        <!-- Active Model Badge -->
+        <div class="rounded-lg bg-slate-100 px-2.5 py-1 font-mono text-xs text-slate-700 shadow-xs hidden lg:inline-flex">
+          Model: {{ summary.active_model.version }} ({{ summary.active_model.file_size_kb }} KB)
+        </div>
+
+        <!-- Quick Back Button -->
+        <a href="/" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer bg-white text-sky-700 hover:bg-sky-50 shadow-xs active:scale-95" title="Return to Live Monitor">
+          <svg class="size-3.5 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+          Live Monitor
+        </a>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Main Academic Benchmarks Page Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 flex-1 w-full">
+
+    <!-- Page Header & Dissertation Context Banner -->
+    <section class="bg-white rounded-3xl p-6 sm:p-8 shadow-sm space-y-4" aria-label="Page Header">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <!-- Breadcrumb & Tag -->
+          <div class="flex items-center gap-2 mb-2 flex-wrap text-xs">
+            <a href="/" class="text-sky-600 hover:text-sky-800 font-semibold flex items-center gap-1 transition-colors">
+              <svg class="size-3 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+              Live Monitor
+            </a>
+            <span class="text-slate-300">/</span>
+            <span class="text-slate-500 font-medium">Research &amp; Evaluation</span>
+            <span class="text-slate-300">/</span>
+            <span class="px-2.5 py-0.5 rounded-full bg-sky-500 text-white font-bold text-[11px] shadow-xs">
+              B.Sc. Dissertation Empirical Evaluation
+            </span>
+          </div>
+          
+          <h2 class="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-slate-900">
+            Academic Model Benchmarks &amp; Quantization Trade-offs
+          </h2>
+          <p class="text-xs sm:text-sm text-slate-500 mt-1 max-w-4xl leading-relaxed">
+            Replication study of Dissertation Table 11, Table 12, and Table 13 across UNSW-NB15 (8,233 test windows) and CICIDS2017 (2,622 test windows). All benchmarks were executed under strict edge constraints: single CPU core isolation (<code class="font-mono text-xs bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">taskset -c 0</code>), zero GPU acceleration, and a 2.0&nbsp;GB memory ceiling.
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2 shrink-0">
+          <a href="/" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-sky-50 hover:bg-sky-100 text-sky-800 shadow-xs transition-all cursor-pointer">
+            <svg class="size-4 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            Perimeter Shield Active
+          </a>
+        </div>
+      </div>
+
+      <!-- Top 4 Panoramic Summary KPI Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+        
+        <!-- Deployed Model -->
+        <div class="bg-sky-50 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-xs hover:shadow-sm transition-all">
+          <span class="text-[11px] uppercase font-bold text-slate-400 tracking-wider">Deployed Model</span>
+          <div class="my-2">
+            <span class="text-base sm:text-lg font-bold text-sky-900 truncate block" id="bench-model-name">TFLite Hybrid (8-Bit)</span>
+          </div>
+          <span class="text-xs text-sky-600 font-medium">Zero-copy edge FlatBuffer</span>
+        </div>
+
+        <!-- Held-Out Accuracy -->
+        <div class="bg-sky-50 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-xs hover:shadow-sm transition-all">
+          <span class="text-[11px] uppercase font-bold text-slate-400 tracking-wider">Held-Out Accuracy</span>
+          <div class="my-2">
+            <span class="text-2xl sm:text-3xl font-extrabold text-slate-900 tabular-nums" id="bench-accuracy">92.46%</span>
+          </div>
+          <span class="text-xs text-sky-600 font-medium">Recall: 92.00% &bull; Macro F1: 92.31%</span>
+        </div>
+
+        <!-- Quantized Footprint -->
+        <div class="bg-sky-50 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-xs hover:shadow-sm transition-all">
+          <span class="text-[11px] uppercase font-bold text-slate-400 tracking-wider">Quantized Footprint</span>
+          <div class="my-2">
+            <span class="text-2xl sm:text-3xl font-extrabold text-sky-600 tabular-nums" id="bench-size">56.89 KB</span>
+          </div>
+          <span class="text-xs text-sky-700 font-semibold">&le; 150 KB budget (Passed: 62% under)</span>
+        </div>
+
+        <!-- Edge Mean Latency -->
+        <div class="bg-sky-50 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-xs hover:shadow-sm transition-all">
+          <span class="text-[11px] uppercase font-bold text-slate-400 tracking-wider">Edge Mean Latency</span>
+          <div class="my-2">
+            <span class="text-2xl sm:text-3xl font-extrabold text-sky-600 tabular-nums" id="bench-latency">0.0244 ms</span>
+          </div>
+          <span class="text-xs text-sky-700 font-semibold">&le; 50 ms budget (Passed: &gt;2,000x margin)</span>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Main Navigation Tabs for Dissertation Sections -->
+    <section class="bg-white rounded-3xl p-5 sm:p-7 shadow-sm space-y-6">
+      
+      <div class="flex flex-wrap items-center justify-between gap-3 pb-2">
+        <!-- Interactive Tabs Bar -->
+        <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl flex-1 max-w-3xl" role="tablist" aria-label="Benchmark Sections">
+          <button id="tab-btn-table12" class="flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer bg-white text-sky-700 shadow-xs" role="tab" aria-selected="true">
+            Table 12: Baselines
+          </button>
+          <button id="tab-btn-table11" class="flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 transition-all cursor-pointer" role="tab" aria-selected="false">
+            Table 11: Quantization
+          </button>
+          <button id="tab-btn-table13" class="flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 transition-all cursor-pointer" role="tab" aria-selected="false">
+            Table 13: Hardware &amp; Latency
+          </button>
+          <button id="tab-btn-cm" class="flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 transition-all cursor-pointer" role="tab" aria-selected="false">
+            Confusion Matrices
+          </button>
+        </div>
+
+        <span class="text-xs text-slate-500 font-mono hidden md:inline-block">
+          Dissertation Chapter 4 &bull; Results &amp; Evaluation
+        </span>
+      </div>
+
+      <!-- Tab 1: Table 12 (Comparative Baselines) -->
+      <div id="tab-content-table12" class="space-y-4">
+        
+        <!-- Filter Controls -->
+        <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3 rounded-2xl">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Benchmark Dataset:</span>
+            <button id="filter-all-table12" class="t12-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-500 text-white cursor-pointer transition-all shadow-xs" data-filter="all">All Datasets (14)</button>
+            <button id="filter-unsw-table12" class="t12-filter-btn px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 cursor-pointer transition-all" data-filter="UNSW-NB15">UNSW-NB15 (7)</button>
+            <button id="filter-cicids-table12" class="t12-filter-btn px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 cursor-pointer transition-all" data-filter="CICIDS2017">CICIDS2017 (7)</button>
+          </div>
+          <span class="text-xs text-slate-500 italic">
+            Single-core pinned (XNNPACK) &bull; 10-flow sequence classification
+          </span>
+        </div>
+
+        <!-- Table 12 Main Table -->
+        <div class="overflow-x-auto rounded-2xl bg-slate-50 p-1.5 shadow-xs">
+          <table class="w-full text-left text-xs sm:text-sm">
+            <thead class="bg-sky-100/90 text-sky-950 font-bold uppercase tracking-wider text-[11px]">
+              <tr>
+                <th class="px-3.5 py-3">Model Architecture</th>
+                <th class="px-3 py-3">Accuracy</th>
+                <th class="px-3 py-3">Precision (Macro)</th>
+                <th class="px-3 py-3">Recall (Macro)</th>
+                <th class="px-3 py-3">Macro F1</th>
+                <th class="px-3 py-3">False Positive Rate</th>
+                <th class="px-3 py-3">Inference Latency</th>
+                <th class="px-3 py-3 text-right">Model Size</th>
+              </tr>
+            </thead>
+            <tbody id="table12-body" class="font-mono text-slate-700">
+              <tr>
+                <td colspan="8" class="text-center py-10 text-slate-400 font-sans text-xs">Loading comparative model benchmarks...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Analytical Explanatory Note -->
+        <div class="bg-sky-50/70 p-4 rounded-2xl space-y-1 text-xs text-slate-600">
+          <p class="font-semibold text-slate-800">
+            Key Academic Finding (Table 12):
+          </p>
+          <p>
+            CNN-only establishes the highest raw accuracy on UNSW-NB15 (93.70%), but the hybrid CNN&ndash;LSTM architecture introduces critical temporal feature extraction across flow sequences. While full-precision Hybrid CNN&ndash;LSTM requires 172.99 KB, our 8-bit dynamic-range quantized variant compresses the footprint to <strong>56.89 KB</strong> (67.1% reduction) with only a 0.18% accuracy trade-off (92.46% vs 92.64%), operating in <strong>0.0244 ms</strong> on pinned Core 0.
+          </p>
+          <p class="text-[11px] text-slate-500 italic pt-1">
+            * Cross-dataset generalization on CICIDS2017 tests models trained exclusively on UNSW-NB15 to evaluate zero-shot domain adaptation under disparate feature spaces.
+          </p>
+        </div>
+
+      </div>
+
+      <!-- Tab 2: Table 11 (Quantization & Compression Trade-offs) -->
+      <div id="tab-content-table11" class="space-y-4 hidden">
+        
+        <div class="bg-slate-50 p-3.5 rounded-2xl flex items-center justify-between text-xs text-slate-600">
+          <span class="font-bold text-slate-800">Table 11: Quantization Ablation &amp; Footprint Impact</span>
+          <span class="text-sky-700 font-medium">NFR2 Target: &le; 150 KB Storage Budget</span>
+        </div>
+
+        <!-- Table 11 Main Table -->
+        <div class="overflow-x-auto rounded-2xl bg-slate-50 p-1.5 shadow-xs">
+          <table class="w-full text-left text-xs sm:text-sm">
+            <thead class="bg-sky-100/90 text-sky-950 font-bold uppercase tracking-wider text-[11px]">
+              <tr>
+                <th class="px-3.5 py-3">Model Representation</th>
+                <th class="px-3 py-3">File Size</th>
+                <th class="px-3 py-3">Parameters</th>
+                <th class="px-3 py-3">Accuracy</th>
+                <th class="px-3 py-3">Precision (Macro)</th>
+                <th class="px-3 py-3">Recall (Macro)</th>
+                <th class="px-3 py-3">Macro F1</th>
+                <th class="px-3 py-3 text-right">FPR</th>
+              </tr>
+            </thead>
+            <tbody id="table11-body" class="font-mono text-slate-700">
+              <tr>
+                <td colspan="8" class="text-center py-10 text-slate-400 font-sans text-xs">Loading quantization ablation metrics...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Quantization Callout Box -->
+        <div class="bg-sky-50/70 p-4 rounded-2xl space-y-1.5 text-xs text-slate-600">
+          <p class="font-bold text-slate-900">
+            Ablation Analysis: Post-Training Dynamic Range Quantization
+          </p>
+          <p>
+            Post-training dynamic-range quantization transforms the 32-bit floating point weights into signed 8-bit integers while preserving activations in floating point for maximum numerical fidelity. This achieves a <strong>3.04x compression ratio</strong> (172.99 KB &rarr; 56.89 KB), well beneath the strict 150.0 KB ceiling mandated by NFR2, allowing the entire model FlatBuffer to be memory-mapped with zero runtime deserialization overhead.
+          </p>
+        </div>
+
+      </div>
+
+      <!-- Tab 3: Table 13 (Hardware & Edge Feasibility) -->
+      <div id="tab-content-table13" class="space-y-6 hidden">
+        
+        <div class="bg-slate-50 p-3.5 rounded-2xl flex items-center justify-between text-xs text-slate-600">
+          <span class="font-bold text-slate-800">Table 13: Empirical Hardware Feasibility &amp; Latency Percentiles</span>
+          <span class="text-sky-700 font-medium">1,000 Continuous Iterations under <code class="font-mono bg-white px-1 rounded">taskset -c 0</code></span>
+        </div>
+
+        <!-- Table 13 Main Table -->
+        <div class="overflow-x-auto rounded-2xl bg-slate-50 p-1.5 shadow-xs">
+          <table class="w-full text-left text-xs sm:text-sm">
+            <thead class="bg-sky-100/90 text-sky-950 font-bold uppercase tracking-wider text-[11px]">
+              <tr>
+                <th class="px-3.5 py-3">Evaluation Metric</th>
+                <th class="px-3 py-3">Empirical Measured Value</th>
+                <th class="px-3 py-3">Dissertation NFR Target</th>
+                <th class="px-3 py-3 text-right">Compliance Status</th>
+              </tr>
+            </thead>
+            <tbody id="table13-body" class="font-mono text-slate-700">
+              <tr>
+                <td colspan="4" class="text-center py-10 text-slate-400 font-sans text-xs">Loading hardware benchmark telemetry...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- High-Resolution Latency Distribution Plot -->
+        <div class="bg-slate-50 rounded-2xl p-5 shadow-xs text-center space-y-3">
+          <div class="flex items-center justify-between pb-2">
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800">
+              Constrained-Environment Latency Distribution &amp; NFR1 Compliance Margin
+            </h3>
+            <span class="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
+              NFR1 Compliance Margin: 2,047x Headroom
+            </span>
+          </div>
+          <div class="bg-white rounded-xl p-3 shadow-xs inline-block max-w-full">
+            <img id="edge-latency-plot-img" src="/api/figures/edge_latency_distribution.png" alt="Edge Latency Distribution Plot" class="mx-auto rounded-lg max-h-[380px] max-w-full object-contain">
+          </div>
+          <p class="text-[11px] text-slate-500 italic max-w-3xl mx-auto">
+            Figure shows empirical latency distribution across 1,000 warm iterations on pinned Core 0 with 2GB memory ceiling. Red threshold line indicates NFR1 budget (&le; 50 ms). Measured mean (0.0244 ms) and p99 tail latency (0.0510 ms) verify deterministic real-time execution.
+          </p>
+        </div>
+
+      </div>
+
+      <!-- Tab 4: Confusion Matrix Visual Viewer -->
+      <div id="tab-content-cm" class="space-y-6 hidden">
+        
+        <!-- Filter Bar -->
+        <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3 rounded-2xl">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Filter Dataset:</span>
+            <button id="filter-all-cm" class="cm-dataset-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-500 text-white cursor-pointer transition-all shadow-xs" data-cm-filter="all">All Models</button>
+            <button id="filter-unsw-cm" class="cm-dataset-filter-btn px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 cursor-pointer transition-all" data-cm-filter="UNSW-NB15">UNSW-NB15 (In-Domain)</button>
+            <button id="filter-cicids-cm" class="cm-dataset-filter-btn px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 cursor-pointer transition-all" data-cm-filter="CICIDS2017">CICIDS2017 (Cross-Domain)</button>
+          </div>
+          <span class="text-xs text-slate-500">Click any model below to inspect its matrix and metrics</span>
+        </div>
+
+        <!-- Model Selection Pills Strip -->
+        <div class="flex flex-wrap items-center gap-2" id="cm-model-pills">
+          <!-- Populated dynamically -->
+        </div>
+
+        <!-- Interactive Matrix Display Box -->
+        <div class="bg-slate-50 rounded-3xl p-5 sm:p-8 flex flex-col lg:flex-row items-center gap-8 justify-center shadow-xs">
+          
+          <!-- Image Display Card -->
+          <div class="shrink-0 text-center bg-white p-4 rounded-2xl shadow-xs">
+            <img id="cm-preview-img" src="/api/figures/confusion_matrix_tflite_hybrid.png" alt="Confusion Matrix Diagram" class="rounded-xl shadow-xs max-h-[360px] max-w-full object-contain">
+          </div>
+
+          <!-- Side-by-Side Detailed Metrics Card -->
+          <div class="flex flex-col gap-4 text-xs w-full max-w-sm">
+            <div class="flex items-center justify-between pb-2 bg-sky-50 px-4 py-3 rounded-xl">
+              <div>
+                <h4 class="font-bold text-slate-900 text-sm sm:text-base" id="cm-model-title">Compressed TFLite Hybrid</h4>
+                <p class="text-[11px] text-slate-500">Empirical Test Classification</p>
+              </div>
+              <span class="text-[10px] px-2.5 py-1 rounded-full bg-sky-500 text-white font-bold" id="cm-model-tag">Active Edge Model</span>
+            </div>
+
+            <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-xs space-y-3 font-mono">
+              <div class="flex justify-between items-center pb-1">
+                <span class="text-slate-500 font-sans text-xs">Held-Out Accuracy:</span>
+                <span class="font-bold text-slate-900 text-sm" id="cm-stat-acc">92.46%</span>
+              </div>
+              <div class="flex justify-between items-center pb-1">
+                <span class="text-slate-500 font-sans text-xs">Recall (Sensitivity):</span>
+                <span class="font-bold text-sky-600 text-sm" id="cm-stat-rec">92.00%</span>
+              </div>
+              <div class="flex justify-between items-center pb-1">
+                <span class="text-slate-500 font-sans text-xs">Macro F1 Score:</span>
+                <span class="font-bold text-slate-900 text-sm" id="cm-stat-f1">92.31%</span>
+              </div>
+              <div class="flex justify-between items-center pb-1">
+                <span class="text-slate-500 font-sans text-xs">False Positive Rate (FPR):</span>
+                <span class="font-bold text-slate-700 text-sm" id="cm-stat-fpr">12.52%</span>
+              </div>
+              <div class="flex justify-between items-center pb-1">
+                <span class="text-slate-500 font-sans text-xs">Inference Latency:</span>
+                <span class="font-bold text-sky-700 text-sm" id="cm-stat-lat">0.0244 ms</span>
+              </div>
+              <div class="flex justify-between items-center pb-1">
+                <span class="text-slate-500 font-sans text-xs">Model Binary Size:</span>
+                <span class="font-bold text-slate-900 text-sm" id="cm-stat-size">56.89 KB</span>
+              </div>
+              <div class="flex justify-between items-center pt-1 bg-slate-50 px-2.5 py-1.5 rounded-lg">
+                <span class="text-slate-500 font-sans text-[11px]">Test Windows:</span>
+                <span class="font-bold text-slate-700 text-xs" id="cm-stat-samples">8,233 windows</span>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Clean Footer -->
+  <footer class="mt-auto py-6 px-4 text-center text-xs text-slate-400">
+    <p>Grace NIDS &bull; AI Network Threat Detection Gateway &bull; B.Sc. Research Project</p>
+    <p class="mt-1">Department of Computer Science, University of Uyo &bull; Empirical Evaluation Matrix</p>
+  </footer>
+
+  <script src="/static/js/benchmarks.js"></script>
+</body>
+</html>

@@ -194,7 +194,41 @@ def index():
         "index.html",
         summary=summary,
         nfr=NFR_TARGETS,
-        sim=SIMULATION_CONFIG
+        sim=SIMULATION_CONFIG,
+        active_page="dashboard"
+    )
+
+@app.route("/benchmarks")
+def benchmarks():
+    """Renders the dedicated Academic Benchmarks and Dissertation Evaluation page."""
+    summary = get_system_summary()
+    summary["uptime"] = get_uptime_str()
+    summary["uptime_seconds"] = int(time.time() - SERVER_START_TIME)
+    summary["simulation"] = sim_manager.status()
+
+    benchmark_data = None
+    summary_path = REPORTS_DIR / "evaluation_summary.json"
+    edge_lat_path = REPORTS_DIR / "edge_latency_benchmark.json"
+    if summary_path.exists():
+        try:
+            with open(summary_path, "r") as f:
+                benchmark_data = json.load(f)
+            if edge_lat_path.exists():
+                try:
+                    with open(edge_lat_path, "r") as f_edge:
+                        benchmark_data["edge_latency"] = json.load(f_edge)
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[Benchmarks] Notice loading benchmarks: {e}")
+
+    return render_template(
+        "benchmarks.html",
+        summary=summary,
+        nfr=NFR_TARGETS,
+        sim=SIMULATION_CONFIG,
+        benchmarks=benchmark_data,
+        active_page="benchmarks"
     )
 
 @app.route("/api/status")
