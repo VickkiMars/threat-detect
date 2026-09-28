@@ -15,13 +15,14 @@ import threading
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.config import SIMULATION_CONFIG, NFR_TARGETS, DB_PATH, TFLITE_MODEL_PATH, SAMPLE_FLOWS_PATH
+from src.config import SIMULATION_CONFIG, NFR_TARGETS, DB_PATH, TFLITE_MODEL_PATH, SAMPLE_FLOWS_PATH, IS_SERVERLESS
 from src.database import (
     init_db, get_system_summary, get_recent_detections,
     get_unacknowledged_alerts, get_alert_history,
     acknowledge_alert, acknowledge_all_alerts,
     get_latest_metrics, get_active_model, log_detection,
-    clear_runtime_data
+    clear_runtime_data, get_simulation_state, update_simulation_state,
+    get_max_window_sequence_id
 )
 from src.inference_engine import EdgeInferenceEngine
 from src.stream_simulator import FlowStreamSimulator
@@ -53,6 +54,7 @@ class BackgroundSimulationManager:
         self.windows_processed = 0
         self.alerts_generated = 0
         self.thread = None
+        self.last_step_time = 0.0
         self._init_components()
 
     def _init_components(self):
@@ -63,38 +65,117 @@ class BackgroundSimulationManager:
             if TFLITE_MODEL_PATH.exists():
                 self.engine = EdgeInferenceEngine(TFLITE_MODEL_PATH, num_threads=1)
             if SAMPLE_FLOWS_PATH.exists():
+                max_seq = get_max_window_sequence_id()
                 self.simulator = FlowStreamSimulator(
                     csv_path=SAMPLE_FLOWS_PATH,
                     rate_flows_per_sec=SIMULATION_CONFIG["DEFAULT_REPLAY_RATE"],
                     loop=True
                 )
+                if max_seq > 0:
+                    self.simulator.window_counter = max_seq
                 self.stream_generator = self.simulator.stream_windows()
             self.telemetry = TelemetrySampler()
+
+            # Synchronize state from database
+            state = get_simulation_state()
+            self.running = state.get("is_running", True)
+            self.windows_processed = state.get("windows_processed", 0)
+            self.alerts_generated = state.get("alerts_generated", 0)
+            self.last_step_time = state.get("last_step_time", 0.0)
+
+            # Start background thread only in persistent server environments
+            if self.running and not IS_SERVERLESS:
+                self.thread = threading.Thread(target=self._run_loop, daemon=True)
+                self.thread.start()
         except Exception as e:
             print(f"[SimManager] Initialization notice: {e}")
 
+    def step(self, count: int = 1):
+        """Advances stream replay by count windows and persists results immediately."""
+        with self.lock:
+            if not self.engine or not self.simulator or not self.stream_generator:
+                self._init_components()
+            if not self.engine or not self.simulator or not self.stream_generator:
+                return []
+            
+            new_flow_ids = []
+            for _ in range(count):
+                try:
+                    window_id, sequence_tensor, metadata = next(self.stream_generator)
+                except StopIteration:
+                    if self.simulator and self.simulator.loop:
+                        self.stream_generator = self.simulator.stream_windows()
+                        window_id, sequence_tensor, metadata = next(self.stream_generator)
+                    else:
+                        break
+                
+                pred_class, confidence, latency_ms = self.engine.predict_window(sequence_tensor)
+                self.windows_processed += 1
+                
+                flow_id = log_detection(
+                    model_id=self.model_id,
+                    src_ip=metadata["src_ip"],
+                    dst_ip=metadata["dst_ip"],
+                    protocol=metadata["protocol"],
+                    predicted_class=pred_class,
+                    confidence=confidence,
+                    window_sequence_id=window_id,
+                    latency_ms=latency_ms
+                )
+                
+                if pred_class == 1:
+                    handle_malicious_detection(
+                        flow_id=flow_id,
+                        confidence=confidence,
+                        src_ip=metadata["src_ip"],
+                        dst_ip=metadata["dst_ip"],
+                        protocol=metadata["protocol"],
+                        window_id=window_id
+                    )
+                    self.alerts_generated += 1
+                    
+                new_flow_ids.append(flow_id)
+
+            now = time.time()
+            self.last_step_time = now
+            update_simulation_state(
+                is_running=self.running,
+                set_processed=self.windows_processed,
+                set_alerts=self.alerts_generated,
+                last_step_time=now
+            )
+            
+            if self.telemetry:
+                self.telemetry.sample(current_flow_count=self.windows_processed * 10)
+                
+            return new_flow_ids
+
     def start(self):
         with self.lock:
-            if self.running:
-                return {"status": "already_running", "running": True}
             self.running = True
-            if self.thread is None or not self.thread.is_alive():
-                self.thread = threading.Thread(target=self._run_loop, daemon=True)
-                self.thread.start()
+            update_simulation_state(is_running=True)
+            if not IS_SERVERLESS:
+                if self.thread is None or not self.thread.is_alive():
+                    self.thread = threading.Thread(target=self._run_loop, daemon=True)
+                    self.thread.start()
             return {"status": "started", "running": True}
 
     def pause(self):
         with self.lock:
             self.running = False
+            update_simulation_state(is_running=False)
             return {"status": "paused", "running": False}
 
     def reset(self, clear_data: bool = True):
         with self.lock:
             self.running = False
             if self.simulator:
+                self.simulator.window_counter = 0
                 self.stream_generator = self.simulator.stream_windows()
             self.windows_processed = 0
             self.alerts_generated = 0
+            self.last_step_time = 0.0
+            update_simulation_state(is_running=False, set_processed=0, set_alerts=0, last_step_time=0.0)
             if clear_data:
                 try:
                     clear_runtime_data(DB_PATH)
@@ -110,11 +191,16 @@ class BackgroundSimulationManager:
 
     def status(self):
         with self.lock:
+            state = get_simulation_state()
+            self.running = state.get("is_running", self.running)
+            if state.get("windows_processed", 0) > self.windows_processed:
+                self.windows_processed = state["windows_processed"]
+                self.alerts_generated = state.get("alerts_generated", self.alerts_generated)
             return {
                 "running": self.running,
                 "windows_processed": self.windows_processed,
                 "alerts_generated": self.alerts_generated,
-                "stream_rate_fps": self.simulator.rate_fps if self.simulator else SIMULATION_CONFIG.get("DEFAULT_REPLAY_RATE", 100)
+                "stream_rate_fps": self.simulator.rate_fps if self.simulator else SIMULATION_CONFIG.get("DEFAULT_REPLAY_RATE", 30)
             }
 
     def _run_loop(self):
@@ -159,6 +245,13 @@ class BackgroundSimulationManager:
                         self.alerts_generated += 1
 
                 now = time.time()
+                update_simulation_state(
+                    is_running=self.running,
+                    set_processed=self.windows_processed,
+                    set_alerts=self.alerts_generated,
+                    last_step_time=now
+                )
+
                 if now - last_telemetry_time >= SIMULATION_CONFIG.get("TELEMETRY_INTERVAL_SEC", 1.0):
                     if self.telemetry:
                         self.telemetry.sample(current_flow_count=self.windows_processed * 10)
@@ -171,6 +264,7 @@ class BackgroundSimulationManager:
                     self.stream_generator = self.simulator.stream_windows()
                 else:
                     self.running = False
+                    update_simulation_state(is_running=False)
             except Exception as e:
                 print(f"[SimManager] Loop warning: {e}")
                 time.sleep(0.5)
@@ -266,6 +360,15 @@ def api_simulation_reset():
 @app.route("/api/detections/recent")
 def api_recent_detections():
     """Returns the latest 50 classified 10-flow windows."""
+    state = get_simulation_state()
+    if state.get("is_running", True):
+        # In serverless or when background thread is inactive, step simulation forward on demand
+        if IS_SERVERLESS or (sim_manager.thread is None or not sim_manager.thread.is_alive()):
+            try:
+                sim_manager.step(count=1)
+            except Exception as e:
+                print(f"[API] Simulation step notice: {e}")
+
     limit = min(int(request.args.get("limit", 50)), 100)
     return jsonify({"detections": get_recent_detections(limit=limit)})
 

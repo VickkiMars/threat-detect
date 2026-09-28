@@ -77,6 +77,21 @@ def init_db(db_path: Optional[Path] = None) -> None:
                 host_status TEXT DEFAULT 'NORMAL'
             );
 
+            CREATE TABLE IF NOT EXISTS simulation_state (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                is_running INTEGER NOT NULL DEFAULT 1,
+                windows_processed INTEGER NOT NULL DEFAULT 0,
+                alerts_generated INTEGER NOT NULL DEFAULT 0,
+                last_step_time REAL NOT NULL DEFAULT 0
+            );
+
+            INSERT OR IGNORE INTO simulation_state (id, is_running, windows_processed, alerts_generated, last_step_time)
+            VALUES (1, 1, 0, 0, 0.0);
+
+            -- Purge stale synthetic test artifacts (sequence #1001)
+            DELETE FROM alert WHERE flow_id IN (SELECT flow_id FROM detection_log WHERE window_sequence_id = 1001);
+            DELETE FROM detection_log WHERE window_sequence_id = 1001;
+
             CREATE INDEX IF NOT EXISTS idx_detection_timestamp ON detection_log(timestamp DESC);
             CREATE INDEX IF NOT EXISTS idx_detection_class ON detection_log(predicted_class);
             CREATE INDEX IF NOT EXISTS idx_alert_acknowledged ON alert(acknowledged, created_at DESC);
@@ -223,6 +238,15 @@ def record_metrics(
     finally:
         conn.close()
 
+def get_max_window_sequence_id(db_path: Optional[Path] = None) -> int:
+    """Returns the maximum window_sequence_id recorded in detection_log."""
+    conn = get_connection(db_path)
+    try:
+        row = conn.execute("SELECT MAX(window_sequence_id) FROM detection_log WHERE window_sequence_id != 1001;").fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+    finally:
+        conn.close()
+
 def get_recent_detections(limit: int = 50, db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
     """Retrieves the most recent classified flows."""
     conn = get_connection(db_path)
@@ -337,9 +361,59 @@ def clear_runtime_data(db_path: Optional[Path] = None) -> None:
             conn.execute("DELETE FROM alert;")
             conn.execute("DELETE FROM detection_log;")
             conn.execute("DELETE FROM system_metrics;")
+            conn.execute("UPDATE simulation_state SET windows_processed = 0, alerts_generated = 0, last_step_time = 0 WHERE id = 1;")
     finally:
         conn.close()
     
     # Seed clean baseline telemetry record
     record_metrics(cpu_percent=0.0, memory_rss_mb=49.93, throughput_fps=0.0, host_status="NORMAL", db_path=db_path)
+
+def get_simulation_state(db_path: Optional[Path] = None) -> Dict[str, Any]:
+    """Retrieves current simulation control state from SQLite."""
+    conn = get_connection(db_path)
+    try:
+        row = conn.execute("SELECT is_running, windows_processed, alerts_generated, last_step_time FROM simulation_state WHERE id = 1;").fetchone()
+        if row:
+            return {
+                "is_running": bool(row["is_running"]),
+                "windows_processed": int(row["windows_processed"]),
+                "alerts_generated": int(row["alerts_generated"]),
+                "last_step_time": float(row["last_step_time"])
+            }
+        return {"is_running": True, "windows_processed": 0, "alerts_generated": 0, "last_step_time": 0.0}
+    finally:
+        conn.close()
+
+def update_simulation_state(
+    is_running: Optional[bool] = None,
+    windows_processed_delta: int = 0,
+    alerts_generated_delta: int = 0,
+    set_processed: Optional[int] = None,
+    set_alerts: Optional[int] = None,
+    last_step_time: Optional[float] = None,
+    db_path: Optional[Path] = None
+) -> None:
+    """Updates simulation state atomically in SQLite."""
+    conn = get_connection(db_path)
+    try:
+        with conn:
+            cur = conn.execute("SELECT is_running, windows_processed, alerts_generated, last_step_time FROM simulation_state WHERE id = 1;").fetchone()
+            if not cur:
+                conn.execute(
+                    "INSERT INTO simulation_state (id, is_running, windows_processed, alerts_generated, last_step_time) VALUES (1, 1, 0, 0, 0.0);"
+                )
+                cur = conn.execute("SELECT is_running, windows_processed, alerts_generated, last_step_time FROM simulation_state WHERE id = 1;").fetchone()
+            
+            new_running = cur["is_running"] if is_running is None else (1 if is_running else 0)
+            new_processed = set_processed if set_processed is not None else (cur["windows_processed"] + windows_processed_delta)
+            new_alerts = set_alerts if set_alerts is not None else (cur["alerts_generated"] + alerts_generated_delta)
+            new_time = last_step_time if last_step_time is not None else cur["last_step_time"]
+            
+            conn.execute("""
+                UPDATE simulation_state 
+                SET is_running = ?, windows_processed = ?, alerts_generated = ?, last_step_time = ?
+                WHERE id = 1;
+            """, (new_running, new_processed, new_alerts, new_time))
+    finally:
+        conn.close()
 

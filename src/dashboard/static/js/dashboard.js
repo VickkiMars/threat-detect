@@ -44,6 +44,37 @@ document.addEventListener("DOMContentLoaded", () => {
   let lastAlertIds = new Set();
   let lastFlowId = 0;
   let activeAlertTab = "active";
+  let maxTotalFlows = 0;
+  let maxBenignFlows = 0;
+  let maxThreats = 0;
+
+  // ── LocalStorage persistence for live feed ─────────────────────────────────
+  const LS_KEY = "grace_feed_cache";
+  const LS_MAX = 100; // max rows retained across sessions
+
+  function lsLoad() {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  }
+
+  function lsSave(rows) {
+    try {
+      // Keep the most recent LS_MAX rows sorted desc by flow_id
+      const sorted = [...rows].sort((a, b) => b.flow_id - a.flow_id).slice(0, LS_MAX);
+      localStorage.setItem(LS_KEY, JSON.stringify(sorted));
+    } catch { /* storage full – silently skip */ }
+  }
+
+  function lsClear() {
+    try { localStorage.removeItem(LS_KEY); } catch { }
+  }
+
+  // Seed knownDetections map from cache on boot
+  const knownDetections = new Map();
+  lsLoad().forEach(d => knownDetections.set(d.flow_id, d));
+  // ───────────────────────────────────────────────────────────────────────────
 
   // Threat Severity styling map adhering to industry SecOps red/orange standard
   const severityStyles = {
@@ -129,6 +160,11 @@ document.addEventListener("DOMContentLoaded", () => {
         updateSimButtons(false);
         lastFlowId = 0;
         lastAlertIds.clear();
+        knownDetections.clear();
+        lsClear();
+        maxTotalFlows = 0;
+        maxBenignFlows = 0;
+        maxThreats = 0;
 
         // Immediately zero KPI metrics in DOM
         if (elTotalFlows) elTotalFlows.textContent = "0";
@@ -237,9 +273,13 @@ document.addEventListener("DOMContentLoaded", () => {
         updateSimButtons(data.simulation.running);
       }
       
-      elTotalFlows.textContent = Number(data.total_flows_processed || 0).toLocaleString();
-      elBenignFlows.textContent = Number(data.benign_flows || 0).toLocaleString();
-      elThreats.textContent = Number(data.malicious_threats || 0).toLocaleString();
+      maxTotalFlows = Math.max(maxTotalFlows, Number(data.total_flows_processed || 0));
+      maxBenignFlows = Math.max(maxBenignFlows, Number(data.benign_flows || 0));
+      maxThreats = Math.max(maxThreats, Number(data.malicious_threats || 0));
+
+      elTotalFlows.textContent = maxTotalFlows.toLocaleString();
+      elBenignFlows.textContent = maxBenignFlows.toLocaleString();
+      elThreats.textContent = maxThreats.toLocaleString();
       
       const unackCount = data.unacknowledged_alerts || 0;
       elAlertsCount.textContent = `${unackCount} Alerts`;
@@ -362,62 +402,99 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function renderDetectionRow(d) {
+    const isMalicious = d.predicted_class === 1;
+    const pillStyle = isMalicious
+      ? "bg-rose-600 text-white font-bold"
+      : "bg-slate-100 text-slate-700 font-semibold";
+    const rowBg = isMalicious ? "hover:bg-rose-50/50" : "hover:bg-slate-50";
+    const confText = isMalicious ? "text-rose-700 font-bold" : "text-slate-800 font-semibold";
+    const pillText = isMalicious ? "MALICIOUS" : "BENIGN";
+    const timeStr = (d.timestamp || "").split("T")[1]?.slice(0, 8) || d.timestamp || "";
+    return `
+      <tr class="${rowBg} transition-colors duration-150">
+        <td class="px-2.5 py-2 font-bold text-slate-900">#${d.window_sequence_id}</td>
+        <td class="px-2 py-2 text-slate-500 font-mono text-[11px]">${timeStr}</td>
+        <td class="px-2.5 py-2 text-slate-700 font-mono font-medium">${d.src_ip}</td>
+        <td class="px-2.5 py-2 text-slate-700 font-mono font-medium">${d.dst_ip}</td>
+        <td class="px-2.5 py-2 text-slate-500 font-semibold">${d.protocol}</td>
+        <td class="px-2.5 py-2">
+          <span class="px-2 py-0.5 rounded-full text-[10px] tracking-wider uppercase ${pillStyle}">
+            ${pillText}
+          </span>
+        </td>
+        <td class="px-2.5 py-2 ${confText} tabular-nums">${(d.confidence * 100).toFixed(1)}%</td>
+        <td class="px-2.5 py-2 text-slate-700 font-mono font-medium tabular-nums text-right">${(d.inference_latency_ms || 0).toFixed(3)} ms</td>
+      </tr>`;
+  }
+
+  function renderFeedFromCache() {
+    if (knownDetections.size === 0) {
+      elStreamBody.innerHTML = `<tr><td colspan="8" class="text-center py-10 text-slate-400 font-sans text-xs">Awaiting streaming flow input...</td></tr>`;
+      return;
+    }
+    // Sort descending by flow_id (newest first) and show up to 25
+    const sorted = [...knownDetections.values()]
+      .sort((a, b) => b.flow_id - a.flow_id)
+      .slice(0, 25);
+
+    // Update latency gauge from freshest row
+    if (elLatencyVal && sorted[0].inference_latency_ms !== undefined) {
+      const lat = sorted[0].inference_latency_ms || 0;
+      elLatencyVal.textContent = `${lat.toFixed(3)} ms`;
+      if (elLatencyBar) {
+        elLatencyBar.style.width = `${Math.max(Math.min((lat / 50.0) * 100, 100), 2)}%`;
+      }
+    }
+
+    elStreamBody.innerHTML = sorted.map(renderDetectionRow).join("");
+  }
+
   async function fetchRecentDetections() {
     try {
       const res = await fetch(`${API_BASE}/api/detections/recent?limit=25`);
-      if (!res.ok) return;
-      const data = await res.json();
-      const detections = data.detections || [];
-      
-      if (detections.length === 0) {
-        elStreamBody.innerHTML = `<tr><td colspan="8" class="text-center py-10 text-slate-400 font-sans text-xs">Awaiting streaming flow input...</td></tr>`;
+      if (!res.ok) {
+        // API unavailable – render whatever is cached
+        renderFeedFromCache();
         return;
       }
-      
-      if (detections[0].flow_id === lastFlowId) {
-        return; // No new detections
-      }
-      lastFlowId = detections[0].flow_id;
+      const data = await res.json();
+      const detections = data.detections || [];
 
-      // Update latency gauge with latest observed latency
-      if (elLatencyVal && detections[0].inference_latency_ms !== undefined) {
-        const lat = detections[0].inference_latency_ms;
-        elLatencyVal.textContent = `${lat.toFixed(3)} ms`;
-        if (elLatencyBar) {
-          const latPct = Math.min((lat / 50.0) * 100, 100);
-          elLatencyBar.style.width = `${Math.max(latPct, 2)}%`;
+      // Merge API results into knownDetections (skip legacy seq #1001)
+      let hasNew = false;
+      for (const d of detections) {
+        if (d.window_sequence_id === 1001) continue;
+        if (!knownDetections.has(d.flow_id)) {
+          knownDetections.set(d.flow_id, d);
+          hasNew = true;
         }
       }
-      
-      elStreamBody.innerHTML = detections.map(d => {
-        const isMalicious = d.predicted_class === 1;
-        const pillStyle = isMalicious 
-          ? "bg-rose-600 text-white font-bold"
-          : "bg-slate-100 text-slate-700 font-semibold";
-        const rowBg = isMalicious ? "hover:bg-rose-50/50" : "hover:bg-slate-50";
-        const confText = isMalicious ? "text-rose-700 font-bold" : "text-slate-800 font-semibold";
-        const pillText = isMalicious ? "MALICIOUS" : "BENIGN";
-        const timeStr = d.timestamp.split("T")[1]?.slice(0, 8) || d.timestamp;
-        
-        return `
-          <tr class="${rowBg} transition-colors duration-150">
-            <td class="px-2.5 py-2 font-bold text-slate-900">#${d.window_sequence_id}</td>
-            <td class="px-2 py-2 text-slate-500 font-mono text-[11px]">${timeStr}</td>
-            <td class="px-2.5 py-2 text-slate-700 font-mono font-medium">${d.src_ip}</td>
-            <td class="px-2.5 py-2 text-slate-700 font-mono font-medium">${d.dst_ip}</td>
-            <td class="px-2.5 py-2 text-slate-500 font-semibold">${d.protocol}</td>
-            <td class="px-2.5 py-2">
-              <span class="px-2 py-0.5 rounded-full text-[10px] tracking-wider uppercase ${pillStyle}">
-                ${pillText}
-              </span>
-            </td>
-            <td class="px-2.5 py-2 ${confText} tabular-nums">${(d.confidence * 100).toFixed(1)}%</td>
-            <td class="px-2.5 py-2 text-slate-700 font-mono font-medium tabular-nums text-right">${d.inference_latency_ms.toFixed(3)} ms</td>
-          </tr>
-        `;
-      }).join("");
+
+      // Persist updated cache to localStorage
+      if (hasNew || knownDetections.size > 0) {
+        lsSave([...knownDetections.values()]);
+      }
+
+      // Update lastFlowId to track freshest known flow
+      if (knownDetections.size > 0) {
+        const maxId = Math.max(...knownDetections.keys());
+        if (maxId !== lastFlowId) {
+          lastFlowId = maxId;
+          renderFeedFromCache();
+        } else if (hasNew) {
+          renderFeedFromCache();
+        } else if (knownDetections.size > 0 && elStreamBody.querySelector("td[colspan]")) {
+          // Cache exists but DOM still shows placeholder – render it
+          renderFeedFromCache();
+        }
+      } else {
+        elStreamBody.innerHTML = `<tr><td colspan="8" class="text-center py-10 text-slate-400 font-sans text-xs">Awaiting streaming flow input...</td></tr>`;
+      }
     } catch (err) {
       console.warn("Detections fetch error:", err);
+      // Fallback: render whatever is in cache even if the request threw
+      renderFeedFromCache();
     }
   }
 
@@ -467,7 +544,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  // Initial load
+  // Initial load – render cached rows immediately before first API response
+  if (knownDetections.size > 0) renderFeedFromCache();
   fetchSummary();
   fetchAlerts();
   fetchRecentDetections();
