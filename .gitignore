@@ -34,7 +34,8 @@ venv.bak/
 *.db-journal
 *.db-wal
 *.db-shm
-data/*.db
+# Exclude large/runtime databases except the shipped seed
+data/threat_detection_test.db
 data/UNSW_NB15_*.csv
 models/checkpoints/
 logs/*.csv
