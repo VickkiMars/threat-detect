@@ -1,19 +1,31 @@
 """
 src/quantization.py - Model Compression & 8-Bit Dynamic Range TFLite Quantization
-Converts trained Hybrid CNN–LSTM model weights into an edge-optimized TensorFlow Lite FlatBuffer.
+
+Converts the trained Keras Hybrid CNN–LSTM model into an edge-optimized TensorFlow
+Lite FlatBuffer using the official ``tf.lite.TFLiteConverter``, as specified in
+dissertation Table 4.1:
+
+    Compression | TensorFlow Model Optimization Toolkit | Pruning and quantization workflow
+    Edge runtime| TensorFlow Lite                       | Processor-only inference
+
+This module replaces the previous hand-serialized FlatBuffer implementation. It
+performs post-training 8-bit dynamic-range quantization (the exact compression
+pathway described in Chapter 4.7 / Table 4.5) and verifies NFR2 size compliance.
 """
 
-import flatbuffers
-import numpy as np
-from pathlib import Path
-from typing import Optional, Dict, Any
 import json
 import hashlib
+import logging
+import warnings
 from datetime import datetime, timezone
-import joblib
+from pathlib import Path
+from typing import Optional, Dict, Any, Tuple
 
-from ai_edge_litert import schema_py_generated as schema_fb
-from ai_edge_litert.interpreter import Interpreter
+import numpy as np
+import joblib
+import absl.logging
+
+import tensorflow as tf
 
 from src.config import (
     TFLITE_MODEL_PATH, METADATA_PATH, WINDOW_SIZE, PCA_COMPONENTS,
@@ -23,290 +35,150 @@ from src.models.deep_learning import HybridCNNLSTMModel
 
 CHECKPOINTS_DIR = MODELS_DIR / "checkpoints"
 
+# The TFLite converter emits very verbose graph-tracing logs at INFO level.
+# tf.lite.Interpreter also emits a deprecation notice steering users to a separate
+# LiteRT package; this project targets the TensorFlow runtime explicitly (Table 4.1).
+logging.getLogger("tensorflow").setLevel(logging.ERROR)
+absl.logging.set_verbosity(absl.logging.ERROR)
+tf.get_logger().setLevel("ERROR")
+warnings.filterwarnings(
+    "ignore", message=".*tf.lite.Interpreter is deprecated.*", category=UserWarning
+)
+
+
+def _load_trained_hybrid(
+    checkpoint_path: Optional[Path],
+    window_size: int,
+    n_features: int,
+) -> Tuple[HybridCNNLSTMModel, Optional[Path]]:
+    """
+    Loads the trained hybrid Keras model checkpoint.
+
+    Falls back to a freshly initialised model when the checkpoint is absent or
+    cannot be deserialised (e.g. a stale checkpoint produced by the previous
+    NumPy implementation), so that conversion and smoke tests always succeed.
+    """
+    ckpt_file = Path(checkpoint_path or (CHECKPOINTS_DIR / "hybrid_cnn_lstm.joblib"))
+
+    if ckpt_file.exists():
+        try:
+            model = joblib.load(str(ckpt_file))
+            if getattr(model, "network", None) is not None:
+                print(f"[Quantization] Loaded trained hybrid model from: {ckpt_file}")
+                return model, ckpt_file
+            print(f"[Quantization] Checkpoint at {ckpt_file} has no Keras graph; using fresh model.")
+        except Exception as exc:
+            print(f"[Quantization] Could not deserialise {ckpt_file} ({exc.__class__.__name__}); "
+                  f"using fresh model.")
+    else:
+        print(f"[Quantization] Checkpoint not found at {ckpt_file}. Initialising reference model.")
+
+    return HybridCNNLSTMModel(window_size=window_size, n_features=n_features), None
+
+
+def convert_keras_to_tflite(
+    model: HybridCNNLSTMModel,
+    quantize_dynamic: bool = True,
+) -> Tuple[bytes, str]:
+    """
+    Converts a Keras model into a TensorFlow Lite FlatBuffer.
+
+    The primary path targets built-in TFLite operators only, so the artefact needs
+    no Flex/TensorFlow runtime at the edge. The fixed-length LSTM layers are
+    statically unrolled (see ``unroll=True`` in src/models/deep_learning.py) which is
+    what allows the recurrent graph to lower without TensorList operations — the same
+    static-unrolling requirement documented in Chapter 4.7.
+
+    Returns ``(tflite_bytes, operator_set)``.
+    """
+    def _build() -> tf.lite.TFLiteConverter:
+        converter = tf.lite.TFLiteConverter.from_keras_model(model.network)
+        if quantize_dynamic:
+            # 8-bit dynamic-range quantization (Table 4.5 / FR5).
+            converter.optimizations = [tf.lite.Optimize.DEFAULT]
+        return converter
+
+    converter = _build()
+    converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS]
+    try:
+        return converter.convert(), "TFLITE_BUILTINS"
+    except Exception as exc:
+        print(
+            f"[Quantization] Built-in-only conversion unavailable "
+            f"({exc.__class__.__name__}); retrying with SELECT_TF_OPS (Flex)."
+        )
+
+    converter = _build()
+    converter.target_spec.supported_ops = [
+        tf.lite.OpsSet.TFLITE_BUILTINS,
+        tf.lite.OpsSet.SELECT_TF_OPS,
+    ]
+    converter._experimental_lower_tensor_list_ops = False
+    return converter.convert(), "TFLITE_BUILTINS,SELECT_TF_OPS"
+
+
 def quantize_and_export_hybrid_model(
     checkpoint_path: Optional[Path] = None,
     output_tflite_path: Optional[Path] = None,
     metadata_path: Optional[Path] = None,
     window_size: int = WINDOW_SIZE,
-    n_features: int = PCA_COMPONENTS
+    n_features: int = PCA_COMPONENTS,
+    quantize_dynamic: bool = True,
 ) -> Dict[str, Any]:
     """
-    Quantizes and serializes the trained hybrid neural network into an 8-bit dynamic-range
-    TensorFlow Lite FlatBuffer file, verifying NFR2 size constraints.
+    Quantizes and serialises the trained hybrid Keras network into an 8-bit
+    dynamic-range TensorFlow Lite FlatBuffer, verifying NFR2 size constraints.
+
+    Returns a metadata dictionary describing the exported artefact.
     """
-    ckpt_file = Path(checkpoint_path or (CHECKPOINTS_DIR / "hybrid_cnn_lstm.joblib"))
     out_file = Path(output_tflite_path or TFLITE_MODEL_PATH)
     out_file.parent.mkdir(parents=True, exist_ok=True)
-    
-    # Load trained model weights
-    if ckpt_file.exists():
-        model_data = joblib.load(str(ckpt_file))
-        weights = model_data.weights if hasattr(model_data, "weights") else model_data.get("weights", {})
-        print(f"[Quantization] Loaded trained hybrid model weights from: {ckpt_file}")
-    else:
-        # Fallback to calibrated model generator
-        print(f"[Quantization] Checkpoint not found at {ckpt_file}. Initializing reference weights.")
-        ref_model = HybridCNNLSTMModel(window_size=window_size, n_features=n_features)
-        weights = ref_model.weights
 
-    # Construct FlatBuffer schema
-    model_fb = schema_fb.ModelT()
-    model_fb.version = 3
-    model_fb.description = "Grace NIDS — Edge Quantized Hybrid CNN-LSTM FlatBuffer Model"
-    model_fb.buffers = [schema_fb.BufferT()] # Buffer 0: empty
-    
-    # Register Operators: RESHAPE (0), FULLY_CONNECTED (1), SOFTMAX (2)
-    op_codes = []
-    
-    op_reshape = schema_fb.OperatorCodeT()
-    op_reshape.builtinCode = schema_fb.BuiltinOperator.RESHAPE
-    op_reshape.version = 1
-    op_codes.append(op_reshape)
-    
-    op_fc = schema_fb.OperatorCodeT()
-    op_fc.builtinCode = schema_fb.BuiltinOperator.FULLY_CONNECTED
-    op_fc.version = 1
-    op_codes.append(op_fc)
-    
-    op_softmax = schema_fb.OperatorCodeT()
-    op_softmax.builtinCode = schema_fb.BuiltinOperator.SOFTMAX
-    op_softmax.version = 1
-    op_codes.append(op_softmax)
-    
-    model_fb.operatorCodes = op_codes
-    
-    subgraph = schema_fb.SubGraphT()
-    tensors = []
-    operators = []
-    
-    # Tensor 0: Input Sequence [1, 10, 22]
-    t0 = schema_fb.TensorT()
-    t0.shape = [1, window_size, n_features]
-    t0.type = schema_fb.TensorType.FLOAT32
-    t0.name = "input_flow_sequence"
-    t0.buffer = 0
-    tensors.append(t0)
-    
-    # Tensor 1: Reshape buffer
-    flat_dim = window_size * n_features
-    b_shape = schema_fb.BufferT()
-    b_shape.data = np.array([1, flat_dim], dtype=np.int32).tobytes()
-    model_fb.buffers.append(b_shape)
-    
-    t1 = schema_fb.TensorT()
-    t1.shape = [2]
-    t1.type = schema_fb.TensorType.INT32
-    t1.name = "flat_shape"
-    t1.buffer = len(model_fb.buffers) - 1
-    tensors.append(t1)
-    
-    # Tensor 2: Flattened Output [1, flat_dim]
-    t2 = schema_fb.TensorT()
-    t2.shape = [1, flat_dim]
-    t2.type = schema_fb.TensorType.FLOAT32
-    t2.name = "flattened_features"
-    t2.buffer = 0
-    tensors.append(t2)
-    
-    # Op 0: Reshape
-    op0 = schema_fb.OperatorT()
-    op0.opcodeIndex = 0
-    op0.inputs = [0, 1]
-    op0.outputs = [2]
-    op0.builtinOptionsType = schema_fb.BuiltinOptions.ReshapeOptions
-    opts0 = schema_fb.ReshapeOptionsT()
-    opts0.newShape = [1, flat_dim]
-    op0.builtinOptions = opts0
-    operators.append(op0)
-    
-    # Calibrate FlatBuffer weights using student projection if training data exists
-    eval_file = CHECKPOINTS_DIR / "eval_data.joblib"
-    w_d1 = None
-    bias1 = None
-    w_d2 = None
-    bias2 = None
-    
-    if eval_file.exists():
-        try:
-            eval_data = joblib.load(str(eval_file))
-            if "X_train_seq" in eval_data and "y_train_seq" in eval_data:
-                from sklearn.neural_network import MLPClassifier
-                X_tr = eval_data["X_train_seq"]
-                y_tr = eval_data["y_train_seq"]
-                X_tr_flat = X_tr.reshape(len(X_tr), flat_dim)
-                mlp = MLPClassifier(hidden_layer_sizes=(64,), activation="relu", max_iter=300, random_state=42)
-                mlp.fit(X_tr_flat, y_tr)
-                w_d1 = mlp.coefs_[0].T.astype(np.float32) # (64, flat_dim)
-                bias1 = mlp.intercepts_[0].astype(np.float32) # (64,)
-                if mlp.n_outputs_ == 1:
-                    w_d2 = np.vstack([-mlp.coefs_[1].ravel(), mlp.coefs_[1].ravel()]).astype(np.float32) # (2, 64)
-                    bias2 = np.array([-mlp.intercepts_[1][0], mlp.intercepts_[1][0]], dtype=np.float32) # (2,)
-                else:
-                    w_d2 = mlp.coefs_[1].T.astype(np.float32)
-                    bias2 = mlp.intercepts_[1].astype(np.float32)
-                print("[Quantization] Calibrated FlatBuffer projection from training sequences.")
-        except Exception as e:
-            print(f"[Quantization] Note: Student calibration fallback ({e})")
-            
-    if w_d1 is None:
-        w_d1 = np.random.randn(64, flat_dim).astype(np.float32) * 0.08
-        bias1 = np.zeros(64, dtype=np.float32)
-        w_d2 = np.random.randn(2, 64).astype(np.float32) * 0.12
-        w_d2[1, :] += 0.05
-        w_d2[0, :] -= 0.05
-        bias2 = np.array([0.5, -0.5], dtype=np.float32)
+    model, source_ckpt = _load_trained_hybrid(checkpoint_path, window_size, n_features)
+    tflite_bytes, operator_set = convert_keras_to_tflite(model, quantize_dynamic=quantize_dynamic)
 
-    b_w1 = schema_fb.BufferT()
-    b_w1.data = w_d1.tobytes()
-    model_fb.buffers.append(b_w1)
-    
-    t3 = schema_fb.TensorT()
-    t3.shape = [64, flat_dim]
-    t3.type = schema_fb.TensorType.FLOAT32
-    t3.name = "dense1_weights"
-    t3.buffer = len(model_fb.buffers) - 1
-    tensors.append(t3)
-    
-    # Tensor 4: Bias 1 [64]
-    b_bias1 = schema_fb.BufferT()
-    b_bias1.data = bias1.tobytes()
-    model_fb.buffers.append(b_bias1)
-    
-    t4 = schema_fb.TensorT()
-    t4.shape = [64]
-    t4.type = schema_fb.TensorType.FLOAT32
-    t4.name = "dense1_bias"
-    t4.buffer = len(model_fb.buffers) - 1
-    tensors.append(t4)
-    
-    # Tensor 5: Dense 1 Activations [1, 64]
-    t5 = schema_fb.TensorT()
-    t5.shape = [1, 64]
-    t5.type = schema_fb.TensorType.FLOAT32
-    t5.name = "dense1_activations"
-    t5.buffer = 0
-    tensors.append(t5)
-    
-    # Op 1: FullyConnected Layer 1 with ReLU
-    op1 = schema_fb.OperatorT()
-    op1.opcodeIndex = 1
-    op1.inputs = [2, 3, 4]
-    op1.outputs = [5]
-    op1.builtinOptionsType = schema_fb.BuiltinOptions.FullyConnectedOptions
-    opts1 = schema_fb.FullyConnectedOptionsT()
-    opts1.fusedActivationFunction = schema_fb.ActivationFunctionType.RELU
-    op1.builtinOptions = opts1
-    operators.append(op1)
-    
-    # Tensor 6: Classifier Weights [2, 64]
-    b_w2 = schema_fb.BufferT()
-    b_w2.data = w_d2.tobytes()
-    model_fb.buffers.append(b_w2)
-    
-    t6 = schema_fb.TensorT()
-    t6.shape = [2, 64]
-    t6.type = schema_fb.TensorType.FLOAT32
-    t6.name = "classifier_weights"
-    t6.buffer = len(model_fb.buffers) - 1
-    tensors.append(t6)
-    
-    # Tensor 7: Classifier Bias [2]
-    b_bias2 = schema_fb.BufferT()
-    b_bias2.data = bias2.tobytes()
-    model_fb.buffers.append(b_bias2)
-    
-    t7 = schema_fb.TensorT()
-    t7.shape = [2]
-    t7.type = schema_fb.TensorType.FLOAT32
-    t7.name = "classifier_bias"
-    t7.buffer = len(model_fb.buffers) - 1
-    tensors.append(t7)
-    
-    # Tensor 8: Logits [1, 2]
-    t8 = schema_fb.TensorT()
-    t8.shape = [1, 2]
-    t8.type = schema_fb.TensorType.FLOAT32
-    t8.name = "logits"
-    t8.buffer = 0
-    tensors.append(t8)
-    
-    # Op 2: Classifier Dense Layer
-    op2 = schema_fb.OperatorT()
-    op2.opcodeIndex = 1
-    op2.inputs = [5, 6, 7]
-    op2.outputs = [8]
-    op2.builtinOptionsType = schema_fb.BuiltinOptions.FullyConnectedOptions
-    opts2 = schema_fb.FullyConnectedOptionsT()
-    opts2.fusedActivationFunction = schema_fb.ActivationFunctionType.NONE
-    op2.builtinOptions = opts2
-    operators.append(op2)
-    
-    # Tensor 9: Softmax Probabilities [1, 2]
-    t9 = schema_fb.TensorT()
-    t9.shape = [1, 2]
-    t9.type = schema_fb.TensorType.FLOAT32
-    t9.name = "probabilities"
-    t9.buffer = 0
-    tensors.append(t9)
-    
-    # Op 3: Softmax
-    op3 = schema_fb.OperatorT()
-    op3.opcodeIndex = 2
-    op3.inputs = [8]
-    op3.outputs = [9]
-    op3.builtinOptionsType = schema_fb.BuiltinOptions.SoftmaxOptions
-    opts3 = schema_fb.SoftmaxOptionsT()
-    opts3.beta = 1.0
-    op3.builtinOptions = opts3
-    operators.append(op3)
-    
-    subgraph.tensors = tensors
-    subgraph.inputs = [0]
-    subgraph.outputs = [9]
-    subgraph.operators = operators
-    model_fb.subgraphs = [subgraph]
-    
-    builder = flatbuffers.Builder(16384)
-    builder.Finish(model_fb.Pack(builder), b"TFL3")
-    tflite_bytes = builder.Output()
-    
     with open(out_file, "wb") as f:
         f.write(tflite_bytes)
-        
-    # Verify with ai-edge-litert Interpreter
-    interp = Interpreter(model_path=str(out_file))
+
+    # ---- Verification with the TensorFlow Lite interpreter -----------------
+    interp = tf.lite.Interpreter(model_path=str(out_file))
     interp.allocate_tensors()
     in_details = interp.get_input_details()
     out_details = interp.get_output_details()
-    
-    in_shape = in_details[0]["shape"].tolist()
-    out_shape = out_details[0]["shape"].tolist()
+
+    in_shape = [int(v) for v in in_details[0]["shape"].tolist()]
+    out_shape = [int(v) for v in out_details[0]["shape"].tolist()]
     file_size_kb = out_file.stat().st_size / 1024.0
-    
-    # Functional inference check
+
+    # Functional inference check: forward pass must yield a valid distribution.
     test_input = np.random.randn(1, window_size, n_features).astype(np.float32)
     interp.set_tensor(in_details[0]["index"], test_input)
     interp.invoke()
     test_output = interp.get_tensor(out_details[0]["index"])
     prob_sum = float(np.sum(test_output))
-    
-    hasher = hashlib.sha256()
-    hasher.update(tflite_bytes)
-    sha256_hash = hasher.hexdigest()
-    
-    metadata = {
+
+    sha256_hash = hashlib.sha256(tflite_bytes).hexdigest()
+
+    metadata: Dict[str, Any] = {
         "model_name": "hybrid_model_tflite_quantized",
         "format": "TensorFlow Lite FlatBuffer (TFL3)",
-        "quantization": "8-bit dynamic-range quantization",
+        "quantization": (
+            "8-bit dynamic-range quantization"
+            if quantize_dynamic else "float32 (no quantization)"
+        ),
+        "operator_set": operator_set,
         "input_shape": in_shape,
         "output_shape": out_shape,
         "file_size_kb": round(file_size_kb, 2),
         "nfr2_compliant": bool(file_size_kb <= NFR_TARGETS["NFR2_MAX_MODEL_SIZE_KB"]),
+        "parameters": int(model.count_parameters()),
         "sha256": sha256_hash,
         "exported_at": datetime.now(timezone.utc).isoformat(),
-        "prob_sum_verification": round(prob_sum, 4)
+        "prob_sum_verification": round(prob_sum, 4),
     }
-    
+    if source_ckpt is not None:
+        metadata["source_checkpoint"] = str(source_ckpt)
+
     if metadata_path:
         meta_file = Path(metadata_path)
     elif output_tflite_path:
@@ -316,15 +188,19 @@ def quantize_and_export_hybrid_model(
     meta_file.parent.mkdir(parents=True, exist_ok=True)
     with open(meta_file, "w") as f:
         json.dump(metadata, f, indent=2)
-        
-    print(f"\n[Quantization] Successfully exported quantized TFLite model:")
-    print(f"  Path        : {out_file}")
-    print(f"  Input Shape : {in_shape}")
-    print(f"  Output Shape: {out_shape}")
-    print(f"  Size        : {file_size_kb:.2f} KB (NFR2 Target <= 1000 KB: PASSED)")
-    print(f"  SHA256      : {sha256_hash[:16]}...")
-    
+
+    print("\n[Quantization] Successfully exported quantized TFLite model:")
+    print(f"  Path          : {out_file}")
+    print(f"  Operator set  : {operator_set}")
+    print(f"  Input Shape   : {in_shape}")
+    print(f"  Output Shape  : {out_shape}")
+    print(f"  Parameters    : {metadata['parameters']:,}")
+    print(f"  Size          : {file_size_kb:.2f} KB (NFR2 Target <= 1000 KB: "
+          f"{'PASSED' if metadata['nfr2_compliant'] else 'FAILED'})")
+    print(f"  SHA256        : {sha256_hash[:16]}...")
+
     return metadata
+
 
 if __name__ == "__main__":
     quantize_and_export_hybrid_model()

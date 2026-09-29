@@ -1,0 +1,43 @@
+# Virtual environments and local interpreters
+.venv
+venv
+ENV
+env
+*.pyc
+__pycache__
+*.pyo
+*.pyd
+.Python
+.coverage
+htmlcov/
+.pytest_cache/
+*.log
+media/case_attachments/*
+
+# Runtime SQLite databases (container seeds its own schema at startup)
+data/threat_detection.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Heavy training datasets (image ships sample_flows.csv only)
+data/UNSW_NB15_*.csv
+data/CICIDS2017_*.csv
+data/*.zip
+data/*.tar.gz
+
+# Training checkpoints and Word thesis documents
+models/checkpoints/*
+*.docx
+DISSERTATION_TECHNICAL_REPORT.md
+TABLEupdate.md
+
+# Version control, IDE and deployment metadata
+.git
+.gitignore
+.vercel
+.vercelignore
+vercel.json
+.vscode/
+.idea/
+*.swp

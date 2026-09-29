@@ -29,6 +29,7 @@ from src.models.deep_learning import (
 )
 from src.quantization import quantize_and_export_hybrid_model
 from src.evaluate import run_evaluation_suite
+from src.cicids_eval import run_cicids_evaluation
 
 CHECKPOINTS_DIR = MODELS_DIR / "checkpoints"
 
@@ -59,7 +60,8 @@ def run_training_pipeline(
     max_train_records: Optional[int] = None,
     epochs: int = 15,
     quantize: bool = True,
-    evaluate: bool = True
+    evaluate: bool = True,
+    cicids_eval: bool = True,
 ) -> Dict[str, Any]:
     """Executes the complete training workflow across all 6 architectures."""
     unsw_train = DATA_DIR / "UNSW_NB15_training-set.csv"
@@ -209,6 +211,20 @@ def run_training_pipeline(
         print("=" * 75)
         eval_results = run_evaluation_suite()
 
+    # 10. CICIDS2017 Cross-Dataset Portability Evaluation (Sprint 3 - T3.4)
+    if cicids_eval:
+        cicids_data = DATA_DIR / "CICIDS2017_subset_200k.csv"
+        if cicids_data.exists():
+            print("\n" + "=" * 75)
+            print(" CICIDS2017 CROSS-DATASET PORTABILITY EVALUATION")
+            print("=" * 75)
+            run_cicids_evaluation()
+        else:
+            print(
+                "\n[INFO] CICIDS2017 subset not found. Skipping cross-dataset evaluation.\n"
+                "       Run: python3 scripts/retrieve_cicids.py"
+            )
+
     return {
         "models": all_models,
         "splits": {
@@ -227,7 +243,8 @@ def main():
     parser.add_argument("--max-records", type=int, default=None, help="Max raw flow records to process (default: all)")
     parser.add_argument("--epochs", type=int, default=15, help="Training epochs for neural models")
     parser.add_argument("--no-quantize", action="store_true", help="Skip TFLite quantization")
-    parser.add_argument("--no-evaluate", action="store_true", help="Skip evaluation suite")
+    parser.add_argument("--no-evaluate", action="store_true", help="Skip UNSW-NB15 evaluation suite")
+    parser.add_argument("--no-cicids-eval", action="store_true", help="Skip CICIDS2017 cross-dataset portability evaluation")
     args = parser.parse_args()
 
     run_training_pipeline(
@@ -237,7 +254,8 @@ def main():
         max_train_records=args.max_records,
         epochs=args.epochs,
         quantize=not args.no_quantize,
-        evaluate=not args.no_evaluate
+        evaluate=not args.no_evaluate,
+        cicids_eval=not args.no_cicids_eval,
     )
 
 if __name__ == "__main__":

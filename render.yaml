@@ -1,0 +1,37 @@
+# ==============================================================================
+# Render Infrastructure-as-Code Blueprint for GRACE AI Threat Detection System
+# Architecture: Web Service (Python 3.12 / Gunicorn) + Persistent Disk Volume
+# Reference: docs/REQUIREMENTS_ANALYSIS.md, docs/SIMULATION_SPEC_ADR.md
+# ==============================================================================
+
+services:
+  - type: web
+    name: grace-threat-detect
+    runtime: python
+    buildCommand: ./build.sh
+    startCommand: gunicorn src.dashboard.app:app --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120
+    healthCheckPath: /health/
+    plan: free
+    disk:
+      name: grace-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: GRACE_CONTAINER
+        value: "1"
+      - key: GRACE_HOST_ALLOW_ALL
+        value: "True"
+      - key: GRACE_DISABLE_THREADING
+        value: "1"
+      - key: GRACE_SEED_ON_STARTUP
+        value: "True"
+      - key: CUDA_VISIBLE_DEVICES
+        value: "-1"
+      - key: TF_NUM_INTRAOP_THREADS
+        value: "1"
+      - key: TF_NUM_INTEROP_THREADS
+        value: "1"

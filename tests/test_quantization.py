@@ -7,7 +7,14 @@ NFR2 size constraints (<= 150 KB target), and numerical inference sanity.
 import pytest
 import numpy as np
 from pathlib import Path
-from ai_edge_litert.interpreter import Interpreter
+import warnings
+import tensorflow as tf
+
+# TensorFlow Lite interpreter shipped with TensorFlow (dissertation Table 4.1).
+warnings.filterwarnings(
+    "ignore", message=".*tf.lite.Interpreter is deprecated.*", category=UserWarning
+)
+Interpreter = tf.lite.Interpreter
 
 from src.quantization import quantize_and_export_hybrid_model
 from src.config import TFLITE_MODEL_PATH, NFR_TARGETS
@@ -54,7 +61,7 @@ def test_tflite_file_size_nfr2_contract(exported_tflite_model):
     assert size_kb == pytest.approx(meta["file_size_kb"], abs=0.5)
 
 def test_tflite_interpreter_tensor_signatures(exported_tflite_model):
-    """Verifies tensor shapes and types using the standalone ai-edge-litert runtime."""
+    """Verifies tensor shapes and types using the TensorFlow Lite interpreter."""
     out_path, _ = exported_tflite_model
     interp = Interpreter(model_path=str(out_path))
     interp.allocate_tensors()

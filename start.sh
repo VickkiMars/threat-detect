@@ -131,6 +131,8 @@ echo "------------------------------------------------------------------"
 
 export FLASK_RUN_HOST="$HOST"
 export FLASK_RUN_PORT="$PORT"
+export GRACE_DASHBOARD_HOST="$HOST"
+export GRACE_DASHBOARD_PORT="$PORT"
 
 if [ "$MODE" = "simulated" ]; then
     exec ./scripts/run_simulated.sh .venv/bin/python3 -m src.dashboard.app

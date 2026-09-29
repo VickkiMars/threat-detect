@@ -15,7 +15,11 @@ import threading
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.config import SIMULATION_CONFIG, NFR_TARGETS, DB_PATH, TFLITE_MODEL_PATH, SAMPLE_FLOWS_PATH, IS_SERVERLESS
+from src.config import (
+    SIMULATION_CONFIG, NFR_TARGETS, DB_PATH, TFLITE_MODEL_PATH, SAMPLE_FLOWS_PATH,
+    IS_SERVERLESS, IS_CONTAINER, DISABLE_EMBEDDED_THREADING, SEED_ON_STARTUP,
+    host_is_allowed,
+)
 from src.database import (
     init_db, get_system_summary, get_recent_detections,
     get_unacknowledged_alerts, get_alert_history,
@@ -84,7 +88,10 @@ class BackgroundSimulationManager:
             self.last_step_time = state.get("last_step_time", 0.0)
 
             # Start background thread only in persistent server environments
-            if self.running and not IS_SERVERLESS:
+            # (suppressed inside Gunicorn/uWSGI containers to avoid double
+            # consumption of the flow stream alongside the edge worker).
+            threading_enabled = not (IS_SERVERLESS or IS_CONTAINER or DISABLE_EMBEDDED_THREADING)
+            if self.running and threading_enabled:
                 self.thread = threading.Thread(target=self._run_loop, daemon=True)
                 self.thread.start()
         except Exception as e:
@@ -154,7 +161,7 @@ class BackgroundSimulationManager:
         with self.lock:
             self.running = True
             update_simulation_state(is_running=True)
-            if not IS_SERVERLESS:
+            if not (IS_SERVERLESS or IS_CONTAINER or DISABLE_EMBEDDED_THREADING):
                 if self.thread is None or not self.thread.is_alive():
                     self.thread = threading.Thread(target=self._run_loop, daemon=True)
                     self.thread.start()
@@ -276,6 +283,70 @@ app = Flask(
     template_folder=str(Path(__file__).parent / "templates"),
     static_folder=str(Path(__file__).parent / "static")
 )
+
+SERVICE_VERSION = "v2.0.0-keras-cnnlstm"
+
+@app.before_request
+def validate_request_host():
+    """Rejects requests whose Host header is outside the trusted allow-list.
+    Orchestrator health probes are always exempt from host validation."""
+    if request.path.startswith("/health"):
+        return None
+    if not host_is_allowed(request.host):
+        return jsonify({
+            "status": "error",
+            "message": "Invalid Host header. Add the hostname to GRACE_ALLOWED_HOSTS.",
+        }), 400
+
+@app.route("/health/")
+@app.route("/health")
+def health_check():
+    """
+    Lightweight health check probe for cloud orchestrators (Vercel, Render,
+    Kubernetes, Docker). Verifies service liveness and SQLite query readiness.
+    Returns HTTP 200 if the database is reachable, HTTP 503 if disconnected.
+    """
+    import sqlite3 as _sqlite3
+    db_connected = False
+    db_error = None
+    try:
+        conn = _sqlite3.connect(str(DB_PATH), timeout=5.0)
+        try:
+            db_connected = conn.execute("SELECT 1;").fetchone()[0] == 1
+        finally:
+            conn.close()
+    except Exception as exc:
+        db_error = str(exc)
+
+    is_healthy = db_connected
+    payload = {
+        "status": "healthy" if is_healthy else "unhealthy",
+        "database": "connected" if db_connected else f"disconnected ({db_error})",
+        "service": "grace-threat-detect",
+        "version": SERVICE_VERSION,
+        "model_present": TFLITE_MODEL_PATH.exists(),
+        "container": IS_CONTAINER,
+        "serverless": IS_SERVERLESS,
+        "uptime_seconds": int(time.time() - SERVER_START_TIME),
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    return jsonify(payload), (200 if is_healthy else 503)
+
+# Container startup bootstrap: ensure schema/registry exist on a fresh volume
+# (mirrors docker-entrypoint.sh for platforms that skip the image entrypoint).
+if SEED_ON_STARTUP:
+    try:
+        init_db()
+        if not get_active_model():
+            print("[GRACE] No active model registered — running demo seeding...")
+            import subprocess
+            subprocess.run(
+                [sys.executable, str(PROJECT_ROOT / "scripts" / "seed_demo_data.py")],
+                check=False,
+            )
+    except Exception as seed_exc:
+        print(f"[GRACE Warning] Startup seeding notice: {seed_exc}")
+
 
 @app.route("/")
 def index():
@@ -441,9 +512,9 @@ def run_dashboard(host: str = None, port: int = None):
     """Starts the Flask development web server."""
     import os
     if host is None:
-        host = os.environ.get("FLASK_RUN_HOST", SIMULATION_CONFIG["DASHBOARD_HOST"])
+        host = os.environ.get("GRACE_DASHBOARD_HOST", SIMULATION_CONFIG["DASHBOARD_HOST"])
     if port is None:
-        port = int(os.environ.get("FLASK_RUN_PORT", SIMULATION_CONFIG["DASHBOARD_PORT"]))
+        port = int(os.environ.get("PORT", os.environ.get("FLASK_RUN_PORT", SIMULATION_CONFIG["DASHBOARD_PORT"])))
     print("==================================================================")
     print(" AI NETWORK THREAT MONITORING DASHBOARD (FLASK DECOUPLED SERVICE)")
     print(f" URL             : http://{host}:{port}")

@@ -1,71 +1,159 @@
 """
 src/models/deep_learning.py - Deep Learning Baselines and Hybrid CNN–LSTM Architecture
-Implements CNN-only, LSTM-only, and Hybrid CNN–LSTM neural models with vectorized NumPy computation,
-Adam optimization, binary cross-entropy loss, and early stopping.
+
+Implemented with TensorFlow / Keras, as specified in dissertation Table 4.1
+("Development environment and tools": Deep learning = TensorFlow/Keras).
+
+This module replaces the earlier hand-written NumPy forward/backward implementation.
+It provides the CNN-only, LSTM-only and Hybrid CNN–LSTM detectors using Keras
+functional models, sparse-categorical cross-entropy, the Adam optimiser and
+early stopping, while preserving the public API consumed by:
+    src/train.py, src/evaluate.py, src/cicids_eval.py, src/quantization.py,
+    src/models/__init__.py and tests/test_models.py
+
+Edge-deployment note: the fixed-length (10-timestep) recurrent layers are declared
+with ``unroll=True`` so that the Keras graph lowers to built-in TensorFlow Lite
+operators during conversion, as required by Table 4.5 / FR5.
 """
 
 import numpy as np
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
+
 import joblib
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
 
-def softmax(z: np.ndarray) -> np.ndarray:
-    """Numerically stable softmax."""
-    shiftz = z - np.max(z, axis=-1, keepdims=True)
-    exps = np.exp(shiftz)
-    return exps / np.sum(exps, axis=-1, keepdims=True)
+# Reproducible initialisation for the dissertation experiment protocol (seed 42).
+SEED = 42
+keras.utils.set_random_seed(SEED)
 
-def relu(x: np.ndarray) -> np.ndarray:
-    return np.maximum(0.0, x)
-
-def relu_derivative(x: np.ndarray) -> np.ndarray:
-    return (x > 0).astype(np.float32)
-
-class AdamOptimizer:
-    """Standard Adam optimizer for vectorized parameter updates."""
-    def __init__(self, lr: float = 0.001, beta1: float = 0.9, beta2: float = 0.999, eps: float = 1e-8):
-        self.lr = lr
-        self.beta1 = beta1
-        self.beta2 = beta2
-        self.eps = eps
-        self.m = {}
-        self.v = {}
-        self.t = 0
-        
-    def step(self, param_key: str, w: np.ndarray, dw: np.ndarray) -> np.ndarray:
-        if param_key not in self.m:
-            self.m[param_key] = np.zeros_like(w)
-            self.v[param_key] = np.zeros_like(w)
-            
-        self.t += 1
-        m = self.m[param_key]
-        v = self.v[param_key]
-        
-        m = self.beta1 * m + (1.0 - self.beta1) * dw
-        v = self.beta2 * v + (1.0 - self.beta2) * (dw ** 2)
-        
-        m_hat = m / (1.0 - (self.beta1 ** self.t) + self.eps)
-        v_hat = v / (1.0 - (self.beta2 ** self.t) + self.eps)
-        
-        self.m[param_key] = m
-        self.v[param_key] = v
-        
-        return w - self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
 
 class DeepLearningModel:
-    """Base class for edge-oriented sequence deep learning models."""
-    def __init__(self, name: str):
+    """Base class for edge-oriented sequence deep learning models (TensorFlow/Keras backend)."""
+
+    def __init__(
+        self,
+        name: str,
+        window_size: int = 10,
+        n_features: int = 22,
+        n_classes: int = 2,
+    ):
         self.name = name
-        self.weights: Dict[str, np.ndarray] = {}
-        self.optimizer = AdamOptimizer(lr=0.001)
+        self.window_size = window_size
+        self.n_features = n_features
+        self.n_classes = n_classes
+        self.network: Optional[keras.Model] = None
+        self._probe: Optional[keras.Model] = None
+        self._probe_layers: Dict[str, str] = {}
         self.is_fitted = False
         self.best_val_loss = float("inf")
-        self.history = {"train_loss": [], "val_loss": [], "val_accuracy": []}
+        self.history: Dict[str, List[float]] = {
+            "train_loss": [],
+            "val_loss": [],
+            "val_accuracy": [],
+        }
 
     def count_parameters(self) -> int:
-        return sum(w.size for w in self.weights.values())
+        """Total number of scalar parameters (trainable + non-trainable) in the network."""
+        if self.network is None:
+            return 0
+        return int(sum(int(np.prod(w.shape)) for w in self.network.get_weights()))
 
+    @property
+    def weights(self) -> List[np.ndarray]:
+        """Backward-compatible accessor for the trained Keras weight arrays."""
+        if self.network is None:
+            return []
+        return self.network.get_weights()
+
+    # ------------------------------------------------------------------
+    # Probe sub-model: exposes intermediate activations for tests/analysis
+    # ------------------------------------------------------------------
+    def _build_probe(self, probe_layers: Dict[str, str]) -> None:
+        """Records the cache_key -> Keras layer-name mapping used by ``forward``."""
+        self._probe_layers = dict(probe_layers)
+
+    def _rebuild_probe(self) -> None:
+        """Constructs a multi-output Keras model exposing the probed layer activations."""
+        if self.network is None or not self._probe_layers:
+            self._probe = None
+            return
+        outputs = {
+            cache_key: self.network.get_layer(layer_name).output
+            for cache_key, layer_name in self._probe_layers.items()
+        }
+        self._probe = keras.Model(self.network.inputs, outputs, name=f"{self.name}_probe")
+
+    # ------------------------------------------------------------------
+    # Compilation
+    # ------------------------------------------------------------------
+    def compile(self, learning_rate: float = 0.001) -> None:
+        """Compiles the Keras graph with Adam and sparse categorical cross-entropy."""
+        if self.network is None:
+            return
+        self.network.compile(
+            optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
+            loss="sparse_categorical_crossentropy",
+            metrics=["accuracy"],
+        )
+
+    # ------------------------------------------------------------------
+    # Inference
+    # ------------------------------------------------------------------
+    def forward(
+        self, X: np.ndarray, training: bool = False
+    ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
+        """
+        Runs a forward pass and returns ``(probabilities, activation_cache)``.
+
+        The cache mirrors the previous NumPy implementation's contract so that
+        existing callers and unit tests continue to work unchanged.
+        """
+        X = np.asarray(X, dtype=np.float32)
+        probs = np.asarray(self.network(X, training=training), dtype=np.float32)
+
+        cache: Dict[str, np.ndarray] = {}
+        if self._probe is not None:
+            # The probe is a multi-output functional model built from
+            # ``self.network.inputs`` (a list), so it expects a list-structured
+            # feed. Passing a bare tensor triggers a Keras structure warning.
+            probed = self._probe([X], training=training)
+            if isinstance(probed, dict):
+                cache = {k: np.asarray(v) for k, v in probed.items()}
+            elif isinstance(probed, (list, tuple)):
+                cache = {
+                    k: np.asarray(v)
+                    for k, v in zip(self._probe_layers.keys(), probed)
+                }
+            else:
+                cache = {next(iter(self._probe_layers)): np.asarray(probed)}
+        return probs, cache
+
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        """Returns class probabilities of shape (N, n_classes)."""
+        X = np.asarray(X, dtype=np.float32)
+        return np.asarray(self.network.predict(X, verbose=0), dtype=np.float32)
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        """Returns the argmax class label for each input window."""
+        return np.argmax(self.predict_proba(X), axis=1)
+
+    def train_step(self, X: np.ndarray, y: np.ndarray) -> float:
+        """Performs a single Keras gradient update on one mini-batch and returns the loss."""
+        X = np.asarray(X, dtype=np.float32)
+        y = np.asarray(y, dtype=np.int32)
+        loss = self.network.train_on_batch(X, y)
+        if isinstance(loss, (list, tuple)):
+            loss = loss[0]
+        return float(loss)
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
     def save(self, file_path: Path) -> Path:
+        """Serialises the wrapper (architecture + weights + history) via joblib."""
         file_path = Path(file_path)
         file_path.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(self, str(file_path))
@@ -73,340 +161,150 @@ class DeepLearningModel:
 
     @classmethod
     def load(cls, file_path: Path) -> "DeepLearningModel":
+        """Restores a previously saved model wrapper."""
         return joblib.load(str(file_path))
+
+    def __getstate__(self) -> Dict[str, Any]:
+        """Serialises the Keras graph as JSON + weight arrays so joblib round-trips cleanly."""
+        state = self.__dict__.copy()
+        if self.network is not None:
+            state["_network_json"] = self.network.to_json()
+            state["_network_weights"] = [np.asarray(w) for w in self.network.get_weights()]
+        else:
+            state["_network_json"] = None
+            state["_network_weights"] = None
+        # Keras objects are not reliably picklable; the JSON + weights pair replaces them.
+        state["network"] = None
+        state["_probe"] = None
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        """Rehydrates the Keras graph from the serialised JSON + weights."""
+        net_json = state.pop("_network_json", None)
+        net_weights = state.pop("_network_weights", None)
+        self.__dict__.update(state)
+
+        self.network = None
+        self._probe = None
+        if net_json is not None:
+            self.network = keras.models.model_from_json(net_json)
+            if net_weights is not None:
+                self.network.set_weights(net_weights)
+            self.compile()
+            self._rebuild_probe()
+
 
 class CNNOnlyModel(DeepLearningModel):
     """
     CNN-only Baseline (Chapter 3.9 & 4.5):
-    Input (N, 10, 22) -> Conv1D(64 filters, kernel=3, ReLU) -> MaxPool1D(2) -> Flatten (5*64=320)
-    -> Dense(64, ReLU) -> Dense(2, Softmax)
+    Input (N, 10, 22) -> Conv1D(64 filters, kernel=3, ReLU) -> MaxPooling1D(2)
+    -> Flatten (5 * 64 = 320) -> Dense(64, ReLU) -> Dense(2, Softmax)
     """
+
     def __init__(self, window_size: int = 10, n_features: int = 22, n_classes: int = 2):
-        super().__init__("CNN-only Baseline")
-        self.window_size = window_size
-        self.n_features = n_features
-        self.n_classes = n_classes
-        
-        np.random.seed(42)
-        # Conv1D weights: (kernel_size=3, in_channels=22, out_channels=64)
-        k_sz, out_c = 3, 64
-        limit_conv = np.sqrt(6.0 / (k_sz * n_features + out_c))
-        w_conv = np.random.uniform(-limit_conv, limit_conv, (k_sz, n_features, out_c)).astype(np.float32)
-        b_conv = np.zeros((out_c,), dtype=np.float32)
-        
-        # Conv output (padding='same') -> (N, 10, 64). MaxPool(2) -> (N, 5, 64). Flat -> (N, 320)
-        flat_dim = 5 * out_c
-        limit_d1 = np.sqrt(6.0 / (flat_dim + 64))
-        w_d1 = np.random.uniform(-limit_d1, limit_d1, (flat_dim, 64)).astype(np.float32)
-        b_d1 = np.zeros((64,), dtype=np.float32)
-        
-        limit_d2 = np.sqrt(6.0 / (64 + n_classes))
-        w_d2 = np.random.uniform(-limit_d2, limit_d2, (64, n_classes)).astype(np.float32)
-        b_d2 = np.zeros((n_classes,), dtype=np.float32)
-        
-        self.weights = {
-            "w_conv": w_conv, "b_conv": b_conv,
-            "w_d1": w_d1, "b_d1": b_d1,
-            "w_d2": w_d2, "b_d2": b_d2
-        }
+        super().__init__("CNN-only Baseline", window_size, n_features, n_classes)
 
-    def forward(self, X: np.ndarray, training: bool = False) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
-        N, T, F = X.shape
-        w_conv, b_conv = self.weights["w_conv"], self.weights["b_conv"]
-        k_sz = w_conv.shape[0] # 3
-        pad = k_sz // 2 # 1
-        
-        # Zero padding across time: (N, T + 2*pad, F)
-        X_padded = np.pad(X, ((0, 0), (pad, pad), (0, 0)), mode="constant")
-        
-        # 1D Convolution
-        conv_out = np.zeros((N, T, w_conv.shape[2]), dtype=np.float32)
-        for t in range(T):
-            patch = X_padded[:, t:t+k_sz, :] # (N, 3, F)
-            conv_out[:, t, :] = np.tensordot(patch, w_conv, axes=([1, 2], [0, 1])) + b_conv
-            
-        conv_relu = relu(conv_out)
-        
-        # MaxPool1D (pool_size=2) -> (N, T//2, out_c) = (N, 5, 64)
-        pool_out = np.zeros((N, T // 2, w_conv.shape[2]), dtype=np.float32)
-        for t in range(T // 2):
-            pool_out[:, t, :] = np.maximum(conv_relu[:, 2*t, :], conv_relu[:, 2*t+1, :])
-            
-        flat = pool_out.reshape(N, -1)
-        d1_z = flat @ self.weights["w_d1"] + self.weights["b_d1"]
-        d1_act = relu(d1_z)
-        
-        if training:
-            # Dropout 0.2
-            mask = (np.random.rand(*d1_act.shape) >= 0.2).astype(np.float32) / 0.8
-            d1_act = d1_act * mask
-        else:
-            mask = None
-            
-        logits = d1_act @ self.weights["w_d2"] + self.weights["b_d2"]
-        probs = softmax(logits)
-        
-        cache = {
-            "X": X, "X_padded": X_padded, "conv_relu": conv_relu,
-            "pool_out": pool_out, "flat": flat, "d1_act": d1_act,
-            "probs": probs
-        }
-        return probs, cache
+        inputs = keras.Input(shape=(window_size, n_features), name="input_flow_sequence")
+        x = layers.Conv1D(
+            filters=64, kernel_size=3, padding="same", activation="relu", name="conv1d_1"
+        )(inputs)
+        x = layers.MaxPooling1D(pool_size=2, name="maxpool_1")(x)
+        x = layers.Flatten(name="flatten")(x)
+        d1 = layers.Dense(64, activation="relu", name="d1_act")(x)
+        probs = layers.Dense(n_classes, activation="softmax", name="probabilities")(d1)
 
-    def train_step(self, X: np.ndarray, y: np.ndarray) -> float:
-        N = X.shape[0]
-        probs, cache = self.forward(X, training=True)
-        
-        # One-hot labels
-        y_onehot = np.zeros((N, self.n_classes), dtype=np.float32)
-        y_onehot[np.arange(N), y] = 1.0
-        
-        loss = -np.mean(np.sum(y_onehot * np.log(probs + 1e-12), axis=1))
-        
-        # Backprop through output
-        d_logits = (probs - y_onehot) / N
-        dw_d2 = cache["d1_act"].T @ d_logits
-        db_d2 = np.sum(d_logits, axis=0)
-        
-        d_d1 = (d_logits @ self.weights["w_d2"].T) * relu_derivative(cache["d1_act"])
-        dw_d1 = cache["flat"].T @ d_d1
-        db_d1 = np.sum(d_d1, axis=0)
-        
-        # Dense updates
-        self.weights["w_d2"] = self.optimizer.step("w_d2", self.weights["w_d2"], dw_d2)
-        self.weights["b_d2"] = self.optimizer.step("b_d2", self.weights["b_d2"], db_d2)
-        self.weights["w_d1"] = self.optimizer.step("w_d1", self.weights["w_d1"], dw_d1)
-        self.weights["b_d1"] = self.optimizer.step("b_d1", self.weights["b_d1"], db_d1)
-        
-        return float(loss)
+        self.network = keras.Model(inputs, probs, name="cnn_only")
+        self._build_probe({"probabilities": "probabilities", "d1_act": "d1_act"})
+        self.compile()
+        self._rebuild_probe()
 
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        probs, _ = self.forward(X, training=False)
-        return probs
-
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        probs = self.predict_proba(X)
-        return np.argmax(probs, axis=1)
 
 class LSTMOnlyModel(DeepLearningModel):
     """
     LSTM-only Baseline (Chapter 3.9 & 4.5):
-    Input (N, 10, 22) -> LSTM(64 hidden units) -> Dense(32, ReLU) -> Dense(2, Softmax)
+    Input (N, 10, 22) -> LSTM(hidden_dim, tanh/sigmoid gates) -> Dense(64, ReLU)
+    -> Dense(2, Softmax)
+
+    ``unroll=True`` statically unrolls the fixed 10-step recurrence so the graph
+    converts to built-in TensorFlow Lite operators (see Table 4.5 / FR5).
     """
-    def __init__(self, window_size: int = 10, n_features: int = 22, hidden_dim: int = 64, n_classes: int = 2):
-        super().__init__("LSTM-only Baseline")
-        self.window_size = window_size
-        self.n_features = n_features
-        self.hidden_dim = hidden_dim
-        self.n_classes = n_classes
-        
-        np.random.seed(42)
-        # Concatenated LSTM gates (input, forget, cell, output)
-        limit = np.sqrt(6.0 / (n_features + hidden_dim))
-        w_x = np.random.uniform(-limit, limit, (n_features, 4 * hidden_dim)).astype(np.float32)
-        w_h = np.random.uniform(-limit, limit, (hidden_dim, 4 * hidden_dim)).astype(np.float32)
-        b = np.zeros((4 * hidden_dim,), dtype=np.float32)
-        # Forget gate bias = 1.0
-        b[hidden_dim:2*hidden_dim] = 1.0
-        
-        limit_d1 = np.sqrt(6.0 / (hidden_dim + 32))
-        w_d1 = np.random.uniform(-limit_d1, limit_d1, (hidden_dim, 32)).astype(np.float32)
-        b_d1 = np.zeros((32,), dtype=np.float32)
-        
-        limit_d2 = np.sqrt(6.0 / (32 + n_classes))
-        w_d2 = np.random.uniform(-limit_d2, limit_d2, (32, n_classes)).astype(np.float32)
-        b_d2 = np.zeros((n_classes,), dtype=np.float32)
-        
-        self.weights = {
-            "w_x": w_x, "w_h": w_h, "b": b,
-            "w_d1": w_d1, "b_d1": b_d1,
-            "w_d2": w_d2, "b_d2": b_d2
-        }
 
-    def forward(self, X: np.ndarray, training: bool = False) -> Tuple[np.ndarray, Dict[str, Any]]:
-        N, T, F = X.shape
-        H = self.hidden_dim
-        h = np.zeros((N, H), dtype=np.float32)
-        c = np.zeros((N, H), dtype=np.float32)
-        
-        w_x, w_h, b = self.weights["w_x"], self.weights["w_h"], self.weights["b"]
-        
-        for t in range(T):
-            xt = X[:, t, :]
-            gates = xt @ w_x + h @ w_h + b
-            gates_clipped = np.clip(gates, -20.0, 20.0)
-            i_gate = 1.0 / (1.0 + np.exp(-gates_clipped[:, :H]))
-            f_gate = 1.0 / (1.0 + np.exp(-gates_clipped[:, H:2*H]))
-            g_gate = np.tanh(gates_clipped[:, 2*H:3*H])
-            o_gate = 1.0 / (1.0 + np.exp(-gates_clipped[:, 3*H:]))
-            
-            c = f_gate * c + i_gate * g_gate
-            h = o_gate * np.tanh(c)
-            
-        d1_act = relu(h @ self.weights["w_d1"] + self.weights["b_d1"])
-        logits = d1_act @ self.weights["w_d2"] + self.weights["b_d2"]
-        probs = softmax(logits)
-        
-        cache = {"X": X, "h_final": h, "d1_act": d1_act, "probs": probs}
-        return probs, cache
+    def __init__(
+        self,
+        window_size: int = 10,
+        n_features: int = 22,
+        hidden_dim: int = 64,
+        n_classes: int = 2,
+    ):
+        super().__init__("LSTM-only Baseline", window_size, n_features, n_classes)
 
-    def train_step(self, X: np.ndarray, y: np.ndarray) -> float:
-        N = X.shape[0]
-        probs, cache = self.forward(X, training=True)
-        
-        y_onehot = np.zeros((N, self.n_classes), dtype=np.float32)
-        y_onehot[np.arange(N), y] = 1.0
-        
-        loss = -np.mean(np.sum(y_onehot * np.log(probs + 1e-12), axis=1))
-        
-        d_logits = (probs - y_onehot) / N
-        dw_d2 = cache["d1_act"].T @ d_logits
-        db_d2 = np.sum(d_logits, axis=0)
-        
-        d_d1 = (d_logits @ self.weights["w_d2"].T) * relu_derivative(cache["d1_act"])
-        dw_d1 = cache["h_final"].T @ d_d1
-        db_d1 = np.sum(d_d1, axis=0)
-        
-        self.weights["w_d2"] = self.optimizer.step("w_d2", self.weights["w_d2"], dw_d2)
-        self.weights["b_d2"] = self.optimizer.step("b_d2", self.weights["b_d2"], db_d2)
-        self.weights["w_d1"] = self.optimizer.step("w_d1", self.weights["w_d1"], dw_d1)
-        self.weights["b_d1"] = self.optimizer.step("b_d1", self.weights["b_d1"], db_d1)
-        
-        return float(loss)
+        inputs = keras.Input(shape=(window_size, n_features), name="input_flow_sequence")
+        h = layers.LSTM(
+            hidden_dim, return_sequences=False, unroll=True, name="h_final"
+        )(inputs)
+        d1 = layers.Dense(64, activation="relu", name="d1_act")(h)
+        probs = layers.Dense(n_classes, activation="softmax", name="probabilities")(d1)
 
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        probs, _ = self.forward(X, training=False)
-        return probs
+        self.network = keras.Model(inputs, probs, name="lstm_only")
+        self._build_probe({"probabilities": "probabilities", "h_final": "h_final"})
+        self.compile()
+        self._rebuild_probe()
 
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        probs = self.predict_proba(X)
-        return np.argmax(probs, axis=1)
 
 class HybridCNNLSTMModel(DeepLearningModel):
     """
-    Proposed Hybrid CNN–LSTM Detector (Chapter 3.9, 3.10 & 4.5):
-    Input (N, 10, 22) -> Conv1D(64, kernel=3, ReLU) -> MaxPool1D(2) -> Dropout(0.2)
-    -> LSTM(64) -> Dropout(0.2) -> Dense(32, ReLU) -> Dense(2, Softmax)
+    Proposed Hybrid CNN–LSTM detector (dissertation Table 3.3):
+    Conv1D(64, k=3, ReLU) -> BatchNormalisation -> MaxPooling1D(2)
+    -> Conv1D(32, k=3, ReLU) -> Dropout(0.30)
+    -> LSTM(64, return_sequences=True) -> LSTM(32)
+    -> Dropout(0.30) -> Dense(64, ReLU) -> Dense(n_classes, Softmax)
+
+    Both recurrent layers are statically unrolled over the fixed 10-flow window so
+    that the Keras graph lowers to built-in TensorFlow Lite operators, avoiding
+    TensorList/Flex dependencies at the edge (FR5, Table 4.5).
     """
-    def __init__(self, window_size: int = 10, n_features: int = 22, cnn_filters: int = 64, lstm_units: int = 64, n_classes: int = 2):
-        super().__init__("Hybrid CNN–LSTM (Proposed)")
-        self.window_size = window_size
-        self.n_features = n_features
-        self.cnn_filters = cnn_filters
-        self.lstm_units = lstm_units
-        self.n_classes = n_classes
-        
-        np.random.seed(42)
-        # 1. Conv1D
-        k_sz = 3
-        limit_c = np.sqrt(6.0 / (k_sz * n_features + cnn_filters))
-        w_conv = np.random.uniform(-limit_c, limit_c, (k_sz, n_features, cnn_filters)).astype(np.float32)
-        b_conv = np.zeros((cnn_filters,), dtype=np.float32)
-        
-        # 2. LSTM over downsampled sequence (10 // 2 = 5 steps, cnn_filters=64 input features)
-        limit_l = np.sqrt(6.0 / (cnn_filters + lstm_units))
-        w_lstm_x = np.random.uniform(-limit_l, limit_l, (cnn_filters, 4 * lstm_units)).astype(np.float32)
-        w_lstm_h = np.random.uniform(-limit_l, limit_l, (lstm_units, 4 * lstm_units)).astype(np.float32)
-        b_lstm = np.zeros((4 * lstm_units,), dtype=np.float32)
-        b_lstm[lstm_units:2*lstm_units] = 1.0 # Forget bias
-        
-        # 3. Dense Head (32, ReLU) -> Output (2, Softmax)
-        limit_d1 = np.sqrt(6.0 / (lstm_units + 32))
-        w_d1 = np.random.uniform(-limit_d1, limit_d1, (lstm_units, 32)).astype(np.float32)
-        b_d1 = np.zeros((32,), dtype=np.float32)
-        
-        limit_d2 = np.sqrt(6.0 / (32 + n_classes))
-        w_d2 = np.random.uniform(-limit_d2, limit_d2, (32, n_classes)).astype(np.float32)
-        # Slight inductive bias toward high-confidence attack separation
-        w_d2[:, 1] += 0.05
-        w_d2[:, 0] -= 0.05
-        b_d2 = np.zeros((n_classes,), dtype=np.float32)
-        
-        self.weights = {
-            "w_conv": w_conv, "b_conv": b_conv,
-            "w_lstm_x": w_lstm_x, "w_lstm_h": w_lstm_h, "b_lstm": b_lstm,
-            "w_d1": w_d1, "b_d1": b_d1,
-            "w_d2": w_d2, "b_d2": b_d2
-        }
 
-    def forward(self, X: np.ndarray, training: bool = False) -> Tuple[np.ndarray, Dict[str, Any]]:
-        N, T, F = X.shape
-        w_conv, b_conv = self.weights["w_conv"], self.weights["b_conv"]
-        k_sz = w_conv.shape[0]
-        pad = k_sz // 2
-        
-        # 1. Conv1D with padding
-        X_padded = np.pad(X, ((0, 0), (pad, pad), (0, 0)), mode="constant")
-        conv_out = np.zeros((N, T, self.cnn_filters), dtype=np.float32)
-        for t in range(T):
-            patch = X_padded[:, t:t+k_sz, :]
-            conv_out[:, t, :] = np.tensordot(patch, w_conv, axes=([1, 2], [0, 1])) + b_conv
-        conv_act = relu(conv_out)
-        
-        # 2. MaxPool1D(2) -> (N, 5, 64)
-        T_pool = T // 2
-        pool_out = np.zeros((N, T_pool, self.cnn_filters), dtype=np.float32)
-        for t in range(T_pool):
-            pool_out[:, t, :] = np.maximum(conv_act[:, 2*t, :], conv_act[:, 2*t+1, :])
-            
-        # 3. LSTM over pooled temporal sequence
-        H = self.lstm_units
-        h = np.zeros((N, H), dtype=np.float32)
-        c = np.zeros((N, H), dtype=np.float32)
-        w_x, w_h, b_l = self.weights["w_lstm_x"], self.weights["w_lstm_h"], self.weights["b_lstm"]
-        
-        for t in range(T_pool):
-            xt = pool_out[:, t, :]
-            gates = xt @ w_x + h @ w_h + b_l
-            i_gate = 1.0 / (1.0 + np.exp(-np.clip(gates[:, :H], -20, 20)))
-            f_gate = 1.0 / (1.0 + np.exp(-np.clip(gates[:, H:2*H], -20, 20)))
-            g_gate = np.tanh(gates[:, 2*H:3*H])
-            o_gate = 1.0 / (1.0 + np.exp(-np.clip(gates[:, 3*H:], -20, 20)))
-            c = f_gate * c + i_gate * g_gate
-            h = o_gate * np.tanh(c)
-            
-        # 4. Dense Head
-        d1_act = relu(h @ self.weights["w_d1"] + self.weights["b_d1"])
-        logits = d1_act @ self.weights["w_d2"] + self.weights["b_d2"]
-        probs = softmax(logits)
-        
-        cache = {
-            "X": X, "pool_out": pool_out, "h_final": h,
-            "d1_act": d1_act, "probs": probs
-        }
-        return probs, cache
+    def __init__(
+        self,
+        window_size: int = 10,
+        n_features: int = 22,
+        cnn_filters: int = 64,
+        lstm_units: int = 64,
+        n_classes: int = 2,
+    ):
+        super().__init__("Hybrid CNN–LSTM", window_size, n_features, n_classes)
 
-    def train_step(self, X: np.ndarray, y: np.ndarray) -> float:
-        N = X.shape[0]
-        probs, cache = self.forward(X, training=True)
-        
-        y_onehot = np.zeros((N, self.n_classes), dtype=np.float32)
-        y_onehot[np.arange(N), y] = 1.0
-        
-        loss = -np.mean(np.sum(y_onehot * np.log(probs + 1e-12), axis=1))
-        
-        d_logits = (probs - y_onehot) / N
-        dw_d2 = cache["d1_act"].T @ d_logits
-        db_d2 = np.sum(d_logits, axis=0)
-        
-        d_d1 = (d_logits @ self.weights["w_d2"].T) * relu_derivative(cache["d1_act"])
-        dw_d1 = cache["h_final"].T @ d_d1
-        db_d1 = np.sum(d_d1, axis=0)
-        
-        self.weights["w_d2"] = self.optimizer.step("w_d2", self.weights["w_d2"], dw_d2)
-        self.weights["b_d2"] = self.optimizer.step("b_d2", self.weights["b_d2"], db_d2)
-        self.weights["w_d1"] = self.optimizer.step("w_d1", self.weights["w_d1"], dw_d1)
-        self.weights["b_d1"] = self.optimizer.step("b_d1", self.weights["b_d1"], db_d1)
-        
-        return float(loss)
+        inputs = keras.Input(shape=(window_size, n_features), name="input_flow_sequence")
+        x = layers.Conv1D(
+            filters=cnn_filters, kernel_size=3, padding="same",
+            activation="relu", name="conv1d_1",
+        )(inputs)
+        x = layers.BatchNormalization(name="batch_norm")(x)
+        x = layers.MaxPooling1D(pool_size=2, name="maxpool_1")(x)
+        x = layers.Conv1D(
+            filters=max(cnn_filters // 2, 1), kernel_size=3, padding="same",
+            activation="relu", name="conv1d_2",
+        )(x)
+        x = layers.Dropout(0.30, name="dropout_1")(x)
+        x = layers.LSTM(
+            lstm_units, return_sequences=True, unroll=True, name="lstm_1"
+        )(x)
+        h = layers.LSTM(
+            max(lstm_units // 2, 1), return_sequences=False, unroll=True, name="h_final"
+        )(x)
+        h = layers.Dropout(0.30, name="dropout_2")(h)
+        d1 = layers.Dense(64, activation="relu", name="d1_act")(h)
+        probs = layers.Dense(n_classes, activation="softmax", name="probabilities")(d1)
 
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        probs, _ = self.forward(X, training=False)
-        return probs
+        self.network = keras.Model(inputs, probs, name="hybrid_cnn_lstm")
+        self._build_probe({
+            "probabilities": "probabilities",
+            "d1_act": "d1_act",
+            "h_final": "h_final",
+        })
+        self.compile()
+        self._rebuild_probe()
 
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        probs = self.predict_proba(X)
-        return np.argmax(probs, axis=1)
 
 def train_neural_model(
     model: DeepLearningModel,
@@ -416,51 +314,50 @@ def train_neural_model(
     y_val: np.ndarray,
     epochs: int = 25,
     batch_size: int = 64,
-    patience: int = 5
+    patience: int = 5,
 ) -> DeepLearningModel:
-    """Trains a neural network model with mini-batch SGD/Adam, early stopping, and loss tracking."""
-    N = X_train.shape[0]
-    best_weights = {k: np.copy(v) for k, v in model.weights.items()}
-    best_loss = float("inf")
-    patience_counter = 0
-    
-    for epoch in range(epochs):
-        indices = np.random.permutation(N)
-        X_shuffled = X_train[indices]
-        y_shuffled = y_train[indices]
-        
-        epoch_losses = []
-        for start_idx in range(0, N, batch_size):
-            end_idx = min(start_idx + batch_size, N)
-            x_b = X_shuffled[start_idx:end_idx]
-            y_b = y_shuffled[start_idx:end_idx]
-            b_loss = model.train_step(x_b, y_b)
-            epoch_losses.append(b_loss)
-            
-        train_loss = float(np.mean(epoch_losses))
-        
-        # Validation
-        val_probs = model.predict_proba(X_val)
-        y_val_onehot = np.zeros((len(y_val), model.n_classes), dtype=np.float32)
-        y_val_onehot[np.arange(len(y_val)), y_val] = 1.0
-        val_loss = float(-np.mean(np.sum(y_val_onehot * np.log(val_probs + 1e-12), axis=1)))
-        val_acc = float(np.mean(np.argmax(val_probs, axis=1) == y_val))
-        
-        model.history["train_loss"].append(train_loss)
-        model.history["val_loss"].append(val_loss)
-        model.history["val_accuracy"].append(val_acc)
-        
-        if val_loss < best_loss:
-            best_loss = val_loss
-            best_weights = {k: np.copy(v) for k, v in model.weights.items()}
-            patience_counter = 0
-        else:
-            patience_counter += 1
-            if patience_counter >= patience:
-                # Early stop
-                break
-                
-    model.weights = best_weights
+    """
+    Trains a Keras deep learning model with Adam optimisation, sparse categorical
+    cross-entropy and early stopping on the validation loss.
+
+    Mirrors the previous NumPy training loop's contract: the fitted model is returned
+    with ``history`` populated by ``train_loss``, ``val_loss`` and ``val_accuracy``
+    lists, and ``best_val_loss`` set to the best observed validation loss.
+    """
+    X_train = np.asarray(X_train, dtype=np.float32)
+    y_train = np.asarray(y_train, dtype=np.int32)
+    X_val = np.asarray(X_val, dtype=np.float32)
+    y_val = np.asarray(y_val, dtype=np.int32)
+
+    callbacks = [
+        keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            patience=patience,
+            restore_best_weights=True,
+            verbose=1,
+        )
+    ]
+
+    hist = model.network.fit(
+        X_train,
+        y_train,
+        validation_data=(X_val, y_val),
+        epochs=epochs,
+        batch_size=batch_size,
+        callbacks=callbacks,
+        shuffle=True,
+        verbose=2,
+    )
+
+    model.history["train_loss"] = [float(v) for v in hist.history.get("loss", [])]
+    model.history["val_loss"] = [float(v) for v in hist.history.get("val_loss", [])]
+    model.history["val_accuracy"] = [
+        float(v) for v in hist.history.get("val_accuracy", [])
+    ]
     model.is_fitted = True
-    model.best_val_loss = best_loss
+    model.best_val_loss = (
+        float(min(model.history["val_loss"]))
+        if model.history["val_loss"]
+        else float("inf")
+    )
     return model

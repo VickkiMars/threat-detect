@@ -1,0 +1,43 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: grace_web
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - GRACE_CONTAINER=1
+      - GRACE_DASHBOARD_HOST=0.0.0.0
+      - GRACE_DASHBOARD_PORT=8000
+      - GRACE_HOST_ALLOW_ALL=True
+      - GRACE_DISABLE_THREADING=1
+      - GRACE_SEED_ON_STARTUP=True
+    depends_on:
+      worker:
+        condition: service_started
+    volumes:
+      - grace_data:/app/data
+      - grace_logs:/app/logs
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: grace_worker
+    restart: unless-stopped
+    command: ["python", "-m", "src.inference_worker"]
+    environment:
+      - GRACE_CONTAINER=1
+      - GRACE_SEED_ON_STARTUP=False
+      - CUDA_VISIBLE_DEVICES=-1
+      - TF_NUM_INTRAOP_THREADS=1
+      - TF_NUM_INTEROP_THREADS=1
+    volumes:
+      - grace_data:/app/data
+      - grace_logs:/app/logs
+
+volumes:
+  grace_data:
+  grace_logs:

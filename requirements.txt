@@ -1,5 +1,18 @@
-# Edge Runtime & Inference Engine
+# Deep Learning Framework — training + TFLite conversion (dissertation Table 4.1)
+# tensorflow-cpu targets CPU-only, GPU-free edge deployment (NFR5). The full
+# `tensorflow` package additionally pulls large NVIDIA CUDA wheels, which are
+# unsuitable for a Raspberry Pi-class deployment target.
+tensorflow-cpu>=2.16.0
+keras>=3.0.0
+
+# Edge Inference Runtime — deployment only
+# The exported .tflite contains built-in operators only, so this standalone
+# interpreter executes it bit-identically at ~48 MB RSS, versus the ~549 MB
+# required merely to import TensorFlow. This is what satisfies the 512 MB NFR3
+# ceiling; TensorFlow remains installed purely as the build-time dependency.
 ai-edge-litert>=2.2.0
+
+# Numerical & Scientific Computing
 numpy>=1.26.0
 scipy>=1.10.0
 joblib>=1.3.0
@@ -10,6 +23,9 @@ scikit-learn>=1.3.0
 
 # Web Dashboard & Local REST API
 flask>=3.0.0
+
+# Production WSGI Application Server (Docker / Render / Cloud PaaS)
+gunicorn>=21.2.0
 
 # System Telemetry & Hardware Profiling
 psutil>=5.9.0

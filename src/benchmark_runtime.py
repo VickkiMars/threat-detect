@@ -182,6 +182,10 @@ def run_benchmark(
     nfr1_pass = mean_lat <= NFR_TARGETS["NFR1_MAX_LATENCY_MS"]
     nfr2_pass = file_size_kb <= NFR_TARGETS["NFR2_MAX_MODEL_SIZE_KB"]
     nfr3_pass = peak_rss_mb <= NFR_TARGETS["NFR3_MAX_MEMORY_RSS_MB"]
+    nfr1_status = "PASSED" if nfr1_pass else "FAILED"
+    nfr2_status = "PASSED" if nfr2_pass else "FAILED"
+    nfr3_status = "PASSED" if nfr3_pass else "FAILED"
+    size_headroom_pct = 100.0 * (1.0 - file_size_kb / 150.0)
     
     # Save CSV
     df_results = pd.DataFrame([{
@@ -222,8 +226,8 @@ def run_benchmark(
         f"| **Interquartile Jitter (IQR)** | {iqr_lat:.4f} ms | High temporal stability | **PASSED** |",
         f"| **Sequence Throughput** | **{throughput_seq:.1f} windows/s** | Sustained streaming rate | **PASSED** |",
         f"| **Flow Classification Rate** | **{throughput_flows:.1f} flows/s** | Real-world line rate | **PASSED** |",
-        f"| **Peak Process Memory (RSS)** | **{peak_rss_mb:.2f} MB** | &le; 512.0 MB (NFR3 ceiling) | **PASSED** |",
-        f"| **Model Storage Footprint** | **{file_size_kb:.2f} KB** | &le; 1,000.0 KB (NFR2, target &le; 150 KB) | **PASSED** (62% under target) |",
+        f"| **Peak Process Memory (RSS)** | **{peak_rss_mb:.2f} MB** | &le; 512.0 MB (NFR3 ceiling) | **{nfr3_status}** |",
+        f"| **Model Storage Footprint** | **{file_size_kb:.2f} KB** | &le; 1,000.0 KB (NFR2, target &le; 150 KB) | **{nfr2_status}** ({size_headroom_pct:.0f}% under the 150 KB target) |",
         f"| **Logical CPU Concurrency** | Single Thread (Pinned Core 0) | Zero GPU reliance (NFR5) | **PASSED** |",
         "",
         "*Note: Formal measurements gathered on single CPU core affinity under `taskset -c 0` simulating Raspberry Pi 4 edge platform. Power draw: NOT MEASURED.*"
@@ -282,7 +286,7 @@ def run_benchmark(
     print("\n" + "=" * 75)
     print(" FORMAL BENCHMARK RESULTS (STORY B7.2 & CHAPTER 4.10)")
     print("=" * 75)
-    print(f" Mean Latency (per 10-flow window): {mean_lat:.4f} ms  (Target <= 50.0 ms : PASSED)")
+    print(f" Mean Latency (per 10-flow window): {mean_lat:.4f} ms  (Target <= 50.0 ms : {nfr1_status})")
     print(f" Median Latency (p50)             : {median_lat:.4f} ms")
     print(f" 90th-Percentile Latency (p90)    : {p90_lat:.4f} ms")
     print(f" 95th-Percentile Latency (p95)    : {p95_lat:.4f} ms")
@@ -290,8 +294,8 @@ def run_benchmark(
     print(f" Min / Max Latency                : {min_lat:.4f} ms / {max_lat:.4f} ms")
     print(f" Jitter (IQR: p75 - p25)          : {iqr_lat:.4f} ms")
     print(f" Throughput                       : {throughput_seq:.1f} windows/s ({throughput_flows:.1f} flows/s)")
-    print(f" Peak Resident Memory (RSS)       : {peak_rss_mb:.2f} MB  (Target <= 512.0 MB: PASSED)")
-    print(f" Model Storage Size               : {file_size_kb:.2f} KB  (Target <= 150.0 KB: PASSED)")
+    print(f" Peak Resident Memory (RSS)       : {peak_rss_mb:.2f} MB  (Target <= 512.0 MB: {nfr3_status})")
+    print(f" Model Storage Size               : {file_size_kb:.2f} KB  (Target <= 150.0 KB: {nfr2_status})")
     print(f" Reports Generated                :")
     print(f"   * Table 13 Markdown : {table13_md_path}")
     print(f"   * Table 13 CSV      : {out_csv}")

@@ -19,7 +19,16 @@ from sklearn.metrics import (
     f1_score, confusion_matrix
 )
 
-from ai_edge_litert.interpreter import Interpreter
+import warnings
+import tensorflow as tf
+
+# TensorFlow Lite interpreter shipped with TensorFlow (dissertation Table 4.1).
+# TensorFlow 2.21 warns that tf.lite.Interpreter is deprecated in favour of a
+# separate LiteRT package; this project targets the TensorFlow runtime explicitly.
+warnings.filterwarnings(
+    "ignore", message=".*tf.lite.Interpreter is deprecated.*", category=UserWarning
+)
+Interpreter = tf.lite.Interpreter
 
 from src.config import (
     MODELS_DIR, TFLITE_MODEL_PATH, PROJECT_ROOT, NFR_TARGETS
@@ -110,12 +119,22 @@ def plot_confusion_matrix(
     plt.close()
     return output_path
 
+def _tflite_parameter_count(default: int = 0) -> int:
+    """Returns the parameter count recorded in the TFLite metadata.json artefact."""
+    meta_file = MODELS_DIR / "reference" / "metadata.json"
+    try:
+        with open(meta_file) as f:
+            return int(json.load(f).get("parameters", default))
+    except Exception:
+        return default
+
+
 def evaluate_tflite_model(
     tflite_path: Path,
     X_test: np.ndarray,
     y_test: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray, float]:
-    """Evaluates the compiled TFLite model using ai-edge-litert interpreter."""
+    """Evaluates the compiled TFLite model using the TensorFlow Lite interpreter."""
     interp = Interpreter(model_path=str(tflite_path))
     interp.allocate_tensors()
     in_idx = interp.get_input_details()[0]["index"]
@@ -230,6 +249,11 @@ def run_evaluation_suite() -> Dict[str, Any]:
         cm_tflite = confusion_matrix(y_test, tflite_preds, labels=[0, 1])
         plot_confusion_matrix(cm_tflite, "Compressed TFLite Hybrid", cm_tflite_path)
         
+        tflite_params = _tflite_parameter_count(
+            default=next(
+                (b["parameters"] for b in benchmarks if b["model_name"] == "Hybrid CNN–LSTM"), 0
+            )
+        )
         tflite_record = {
             "model_name": "Compressed TensorFlow Lite Hybrid",
             "accuracy": tflite_metrics["accuracy"],
@@ -239,7 +263,7 @@ def run_evaluation_suite() -> Dict[str, Any]:
             "fpr": tflite_metrics["fpr"],
             "latency_ms": round(tflite_lat, 4),
             "file_size_kb": round(tflite_size_kb, 2),
-            "parameters": 50594,
+            "parameters": tflite_params,
             "test_samples": len(y_test),
             "cm_path": f"/api/figures/{cm_tflite_path.name}"
         }

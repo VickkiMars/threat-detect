@@ -30,6 +30,8 @@ echo "=== [3/4] Installing Required Dependencies ==="
 echo ""
 echo "=== [4/4] Verifying Core Package Imports ==="
 .venv/bin/python3 -c "
+import tensorflow as tf
+import keras
 import ai_edge_litert
 import sklearn
 import pandas
@@ -38,7 +40,9 @@ import flask
 import psutil
 import sqlite3
 print('All core dependencies successfully imported!')
-print('ai-edge-litert version:', ai_edge_litert.__version__ if hasattr(ai_edge_litert, '__version__') else 'Loaded')
+print('tensorflow version     :', tf.__version__, '(training + TFLite conversion)')
+print('keras version          :', keras.__version__)
+print('ai-edge-litert version :', ai_edge_litert.__version__, '(edge inference runtime)')
 print('scikit-learn version   :', sklearn.__version__)
 print('pandas version         :', pandas.__version__)
 print('numpy version          :', numpy.__version__)

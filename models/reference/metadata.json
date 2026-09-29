@@ -2,6 +2,7 @@
   "model_name": "hybrid_model_tflite_quantized",
   "format": "TensorFlow Lite FlatBuffer (TFL3)",
   "quantization": "8-bit dynamic-range quantization",
+  "operator_set": "TFLITE_BUILTINS",
   "input_shape": [
     1,
     10,
@@ -11,9 +12,11 @@
     1,
     2
   ],
-  "file_size_kb": 56.89,
+  "file_size_kb": 99.59,
   "nfr2_compliant": true,
-  "sha256": "8cedeb71a1c0b7b7b221492208b6f95f577f4cfb03ce82c1a6ffd4a37ec41653",
-  "exported_at": "2026-09-23T14:44:49.580239+00:00",
-  "prob_sum_verification": 1.0
+  "parameters": 50210,
+  "sha256": "68c87453cafefa432c0d55b2b66935d9b73947b46547f9dafb2ecbd311ed7749",
+  "exported_at": "2026-09-28T18:57:26.430445+00:00",
+  "prob_sum_verification": 1.0,
+  "source_checkpoint": "/home/kami/Desktop/codebase/Grace/models/checkpoints/hybrid_cnn_lstm.joblib"
 }

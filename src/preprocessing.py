@@ -35,12 +35,23 @@ COLUMN_ALIASES = {
 def clean_flow_records(df: pd.DataFrame) -> pd.DataFrame:
     """Replaces infinite numbers, normalizes aliases, and imputes missing values."""
     df_clean = df.copy()
+    df_clean.columns = [str(c).strip() for c in df_clean.columns]
     
     # Standardize column aliases
     rename_map = {k: v for k, v in COLUMN_ALIASES.items() if k in df_clean.columns}
     if rename_map:
         df_clean = df_clean.rename(columns=rename_map)
     
+    # Non-feature text metadata columns to preserve
+    skip_cols = {"label", "attack_cat", "proto", "service", "state", "srcip", "dstip", "timestamp"}
+    
+    # Coerce any numeric-like string or object columns
+    for col in df_clean.columns:
+        if col.lower() not in skip_cols and df_clean[col].dtype == object:
+            converted = pd.to_numeric(df_clean[col], errors="coerce")
+            if converted.notna().sum() > 0.5 * len(df_clean):
+                df_clean[col] = converted
+
     # Strip string whitespaces
     for col in df_clean.select_dtypes(include=["object", "string"]).columns:
         df_clean[col] = df_clean[col].astype(str).str.strip().str.lower()
@@ -70,14 +81,11 @@ def fit_preprocessors(
     # Select available numeric columns
     cols = feature_cols or [c for c in NUMERIC_FEATURES if c in clean_df.columns]
     if len(cols) < n_components:
-        # Fallback to all available numeric columns
-        cols = clean_df.select_dtypes(include=[np.number]).columns.tolist()
-        if "label" in cols:
-            cols.remove("label")
-        if "attack_cat" in cols:
-            cols.remove("attack_cat")
-        if "id" in cols:
-            cols.remove("id")
+        # Fallback to all available numeric columns (e.g. for CICIDS2017 benchmark)
+        cols = [
+            c for c in clean_df.select_dtypes(include=[np.number]).columns
+            if c.lower() not in {"label", "attack_cat", "id", "class"}
+        ]
             
     X_train = clean_df[cols].values.astype(np.float32)
     

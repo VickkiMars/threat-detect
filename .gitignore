@@ -48,3 +48,6 @@ logs/*.log
 *.swo
 .DS_Store
 .vercel
+
+# Large evaluation datasets (fetched on demand via scripts/retrieve_cicids.py)
+data/CICIDS2017_subset_*.csv

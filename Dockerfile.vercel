@@ -1,0 +1,60 @@
+# ==============================================================================
+# GRACE AI Network Threat Detection System - Vercel Container Deployment
+# Target: Vercel Dockerfile Deployment (Hobby & Pro)
+# Base: Python 3.12 Slim Linux Container
+# Runtime: Gunicorn WSGI Server + LiteRT (TFLite) Edge Inference Engine
+# Port: Listens dynamically on $PORT (defaults to 80 for Vercel)
+# ==============================================================================
+
+FROM python:3.12-slim
+
+# Prevent Python from writing .pyc files and enable unbuffered logging
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PORT=80 \
+    PYTHONPATH=/app
+
+# Install system dependencies (curl for healthcheck)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create dedicated non-root application user for edge security hardening
+RUN groupadd -r grace && useradd -r -g grace -u 1000 -d /app grace
+
+WORKDIR /app
+
+# Copy dependency specification and install via pip
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy entrypoint script and make executable
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Copy application source tree
+COPY . /app/
+
+# Create persistent storage directories and assign ownership to grace user
+RUN mkdir -p /app/data /app/logs /app/models/checkpoints && \
+    chown -R grace:grace /app
+
+# Switch to non-root detection service user
+USER grace
+
+# Warm the SQLite schema and reference model registry before serving traffic
+RUN python scripts/seed_demo_data.py || \
+    echo "[GRACE Warning] Demo seeding skipped during image build."
+
+# Vercel defaults HTTP traffic to port 80
+EXPOSE 80
+
+# Container healthcheck probing the /health/ endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-80}/health/ || exit 1
+
+ENTRYPOINT ["docker-entrypoint.sh"]
+
+# Production Gunicorn worker execution binding dynamically to $PORT (defaults to 80)
+CMD ["sh", "-c", "exec gunicorn src.dashboard.app:app --bind 0.0.0.0:${PORT:-80} --workers 1 --threads 2 --timeout 120"]

@@ -3,6 +3,7 @@ scripts/seed_demo_data.py - Generates Calibrated Demo Flow Stream & Reference Tr
 Creates benchmark-structured flow records and fits initial PCA/scaler artifacts.
 """
 
+import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -13,7 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config import (
-    DATA_DIR, SAMPLE_FLOWS_PATH, REFERENCE_MODEL_DIR,
+    PROJECT_ROOT, DATA_DIR, SAMPLE_FLOWS_PATH, REFERENCE_MODEL_DIR,
     SCALER_PATH, PCA_PATH, PCA_COMPONENTS, WINDOW_SIZE
 )
 from src.database import init_db, register_model
@@ -187,18 +188,46 @@ def main():
     else:
         print("Preserving existing high-capacity StandardScaler and PCA models trained on full dataset.")
     
-    # 4. Register initial model metadata in SQLite if needed
+    # 4. Register the active model metadata in SQLite.
+    #    Values are read from the live artefacts so the registry cannot drift
+    #    away from the exported TFLite model and its measured benchmarks.
+    model_meta = {}
+    meta_file = REFERENCE_MODEL_DIR / "metadata.json"
+    if meta_file.exists():
+        try:
+            model_meta = json.loads(meta_file.read_text())
+        except Exception:
+            model_meta = {}
+
+    test_accuracy, test_macro_f1 = 0.0, 0.0
+    summary_file = PROJECT_ROOT / "reports" / "evaluation_summary.json"
+    if summary_file.exists():
+        try:
+            summary = json.loads(summary_file.read_text())
+            row = next(
+                (
+                    b for b in summary.get("benchmarks", [])
+                    if b.get("model_name") == "Compressed TensorFlow Lite Hybrid"
+                ),
+                None,
+            )
+            if row:
+                test_accuracy = float(row.get("accuracy", 0.0))
+                test_macro_f1 = float(row.get("f1_macro", 0.0))
+        except Exception:
+            pass
+
     register_model(
-        version="v1.0.0-unsw-hybrid",
+        version="v2.0.0-keras-cnnlstm",
         model_format="TFLITE",
         file_path=str(REFERENCE_MODEL_DIR / "hybrid_model.tflite"),
-        file_size_kb=56.89,
-        test_accuracy=0.9246,
-        test_macro_f1=0.9231,
+        file_size_kb=float(model_meta.get("file_size_kb", 0.0)),
+        test_accuracy=test_accuracy,
+        test_macro_f1=test_macro_f1,
         dataset_origin="UNSW-NB15",
         is_active=1
     )
-    print("Registered initial reference model metadata in SQLite.")
+    print("Registered reference model metadata in SQLite.")
     print("=== Seeding Complete ===")
 
 if __name__ == "__main__":

@@ -1,6 +1,12 @@
 {
   "version": 2,
   "name": "threat-detect",
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60,
+      "memory": 1536
+    }
+  },
   "rewrites": [
     {
       "source": "/(.*)",

@@ -4,28 +4,28 @@
   "iterations": 1000,
   "warmup": 50,
   "latency_percentiles": {
-    "mean_ms": 0.024425,
-    "std_ms": 0.008049,
-    "min_ms": 0.019214,
-    "p25_ms": 0.019969,
-    "median_ms": 0.020422,
-    "p75_ms": 0.022704,
-    "p90_ms": 0.038147,
-    "p95_ms": 0.04047,
-    "p99_ms": 0.05101,
-    "max_ms": 0.067127,
-    "iqr_ms": 0.002734,
-    "jitter_ms": 0.047913
+    "mean_ms": 0.099908,
+    "std_ms": 0.031196,
+    "min_ms": 0.082415,
+    "p25_ms": 0.084587,
+    "median_ms": 0.085603,
+    "p75_ms": 0.107744,
+    "p90_ms": 0.130129,
+    "p95_ms": 0.148891,
+    "p99_ms": 0.226929,
+    "max_ms": 0.411296,
+    "iqr_ms": 0.023156,
+    "jitter_ms": 0.328881
   },
   "throughput": {
-    "sequences_per_sec": 26482.71,
-    "flows_per_sec": 264827.06,
-    "total_benchmark_time_sec": 0.0378
+    "sequences_per_sec": 8598.7,
+    "flows_per_sec": 85986.98,
+    "total_benchmark_time_sec": 0.1163
   },
   "hardware": {
-    "peak_rss_mb": 138.35,
-    "peak_vms_mb": 245.77,
-    "model_size_kb": 56.89,
+    "peak_rss_mb": 142.32,
+    "peak_vms_mb": 246.43,
+    "model_size_kb": 99.59,
     "cpu_pinned": "Core 0",
     "threads": 1,
     "power_draw": "NOT MEASURED"
