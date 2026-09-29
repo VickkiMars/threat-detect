@@ -36,8 +36,6 @@ logs/
 
 # Local container & PaaS build metadata
 .dockerignore
-Dockerfile
-Dockerfile.vercel
 docker-compose.yml
 docker-entrypoint.sh
 build.sh
