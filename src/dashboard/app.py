@@ -87,10 +87,12 @@ class BackgroundSimulationManager:
             self.alerts_generated = state.get("alerts_generated", 0)
             self.last_step_time = state.get("last_step_time", 0.0)
 
-            # Start background thread only in persistent server environments
-            # (suppressed inside Gunicorn/uWSGI containers to avoid double
-            # consumption of the flow stream alongside the edge worker).
-            threading_enabled = not (IS_SERVERLESS or IS_CONTAINER or DISABLE_EMBEDDED_THREADING)
+            # Start background thread unless explicitly disabled.
+            # DISABLE_EMBEDDED_THREADING is set in docker-compose when a
+            # standalone inference worker runs alongside the dashboard to
+            # prevent double-consumption of the flow stream.
+            # On Vercel (single-container, no worker sidecar) threading runs.
+            threading_enabled = not (IS_SERVERLESS or DISABLE_EMBEDDED_THREADING)
             if self.running and threading_enabled:
                 self.thread = threading.Thread(target=self._run_loop, daemon=True)
                 self.thread.start()
@@ -161,7 +163,7 @@ class BackgroundSimulationManager:
         with self.lock:
             self.running = True
             update_simulation_state(is_running=True)
-            if not (IS_SERVERLESS or IS_CONTAINER or DISABLE_EMBEDDED_THREADING):
+            if not (IS_SERVERLESS or DISABLE_EMBEDDED_THREADING):
                 if self.thread is None or not self.thread.is_alive():
                     self.thread = threading.Thread(target=self._run_loop, daemon=True)
                     self.thread.start()
@@ -433,8 +435,9 @@ def api_recent_detections():
     """Returns the latest 50 classified 10-flow windows."""
     state = get_simulation_state()
     if state.get("is_running", True):
-        # In serverless or when background thread is inactive, step simulation forward on demand
-        if IS_SERVERLESS or (sim_manager.thread is None or not sim_manager.thread.is_alive()):
+        # In serverless or when background thread is not alive, step on demand
+        thread_inactive = sim_manager.thread is None or not sim_manager.thread.is_alive()
+        if IS_SERVERLESS or (DISABLE_EMBEDDED_THREADING and thread_inactive):
             try:
                 sim_manager.step(count=1)
             except Exception as e:
