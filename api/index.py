@@ -33,28 +33,5 @@ if not TMP_DB_PATH.exists() and SEED_DB_PATH.exists():
     except Exception as e:
         print(f"[Vercel Init] Notice: Could not copy seed database to /tmp: {e}")
 
-# Import Flask app instance
+# Import Flask app instance — Vercel now passes PATH_INFO correctly via rewrites
 from src.dashboard.app import app
-import re
-from urllib.parse import parse_qs, urlencode
-
-class VercelPathFixMiddleware:
-    """Fixes PATH_INFO for Flask when running behind Vercel serverless rewrites."""
-    def __init__(self, wsgi_app):
-        self.wsgi_app = wsgi_app
-
-    def __call__(self, environ, start_response):
-        query_string = environ.get("QUERY_STRING", "")
-        if "__vercel_original_path" in query_string:
-            params = parse_qs(query_string, keep_blank_values=True)
-            if "__vercel_original_path" in params:
-                raw_path = params.pop("__vercel_original_path")[0]
-                normalized_path = "/" + raw_path.lstrip("/")
-                normalized_path = re.sub(r"/+", "/", normalized_path)
-                environ["PATH_INFO"] = normalized_path
-                environ["QUERY_STRING"] = urlencode(params, doseq=True)
-        elif environ.get("PATH_INFO") in ("/api/index", "/api/index.py", ""):
-            environ["PATH_INFO"] = "/"
-        return self.wsgi_app(environ, start_response)
-
-app.wsgi_app = VercelPathFixMiddleware(app.wsgi_app)
