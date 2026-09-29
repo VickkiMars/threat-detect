@@ -37,7 +37,6 @@ logs/
 # Local container & PaaS build metadata
 .dockerignore
 docker-compose.yml
-docker-entrypoint.sh
 build.sh
 render.yaml
 
