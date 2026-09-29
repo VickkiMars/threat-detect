@@ -9,8 +9,13 @@ FROM python:3.12-slim
 # Prevent Python from writing .pyc files and enable unbuffered logging
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PORT=8000 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    CUDA_VISIBLE_DEVICES=-1 \
+    TF_NUM_INTRAOP_THREADS=1 \
+    TF_NUM_INTEROP_THREADS=1
 
 # Install system dependencies (curl for container healthcheck probe)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -24,8 +29,8 @@ WORKDIR /app
 
 # Copy dependency specification and install via pip
 COPY requirements.txt /app/
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt
 
 # Copy entrypoint script and make executable
 COPY docker-entrypoint.sh /usr/local/bin/

@@ -3,28 +3,47 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: grace-threat-detect:latest
     container_name: grace_web
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${GRACE_PORT:-8000}:8000"
     environment:
       - GRACE_CONTAINER=1
       - GRACE_DASHBOARD_HOST=0.0.0.0
       - GRACE_DASHBOARD_PORT=8000
       - GRACE_HOST_ALLOW_ALL=True
       - GRACE_DISABLE_THREADING=1
-      - GRACE_SEED_ON_STARTUP=True
+      - GRACE_SEED_ON_STARTUP=False
+      - CUDA_VISIBLE_DEVICES=-1
+      - TF_NUM_INTRAOP_THREADS=1
+      - TF_NUM_INTEROP_THREADS=1
     depends_on:
       worker:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - grace_data:/app/data
       - grace_logs:/app/logs
+      - grace_models:/app/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - grace-network
 
   worker:
     build:
       context: .
       dockerfile: Dockerfile
+    image: grace-threat-detect:latest
     container_name: grace_worker
     restart: unless-stopped
     command: ["python", "-m", "src.inference_worker"]
@@ -37,7 +56,27 @@ services:
     volumes:
       - grace_data:/app/data
       - grace_logs:/app/logs
+      - grace_models:/app/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys, os; sys.exit(0 if os.path.exists('/app/data') else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - grace-network
 
 volumes:
   grace_data:
   grace_logs:
+  grace_models:
+
+networks:
+  grace-network:
+    name: grace-network
+    driver: bridge
