@@ -51,3 +51,4 @@ logs/*.log
 
 # Large evaluation datasets (fetched on demand via scripts/retrieve_cicids.py)
 data/CICIDS2017_subset_*.csv
+/figures
