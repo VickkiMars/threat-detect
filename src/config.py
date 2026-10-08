@@ -26,6 +26,15 @@ MODELS_DIR = PROJECT_ROOT / "models"
 if IS_SERVERLESS and not IS_CONTAINER:
     LOGS_DIR = Path("/tmp/logs")
     DB_PATH = Path("/tmp/threat_detection.db")
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    # Automatically bootstrap ephemeral /tmp database from repository seed
+    SEED_DB = DATA_DIR / "threat_detection.db"
+    if not DB_PATH.exists() and SEED_DB.exists():
+        try:
+            import shutil
+            shutil.copy2(SEED_DB, DB_PATH)
+        except Exception as e:
+            print(f"[GRACE Config] Notice copying seed DB to /tmp: {e}")
 else:
     LOGS_DIR = PROJECT_ROOT / "logs"
     DB_PATH = DATA_DIR / "threat_detection.db"

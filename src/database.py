@@ -98,6 +98,16 @@ def init_db(db_path: Optional[Path] = None) -> None:
             CREATE INDEX IF NOT EXISTS idx_alert_severity ON alert(severity);
             CREATE INDEX IF NOT EXISTS idx_metrics_timestamp ON system_metrics(timestamp DESC);
             """)
+
+            # Guarantee reference model exists so foreign key constraints never fail
+            cur = conn.execute("SELECT COUNT(*) FROM model_registry;")
+            if cur.fetchone()[0] == 0:
+                now_ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                conn.execute("""
+                    INSERT OR IGNORE INTO model_registry
+                    (model_id, version, model_format, file_path, file_size_kb, test_accuracy, test_macro_f1, dataset_origin, is_active, registered_at)
+                    VALUES (1, 'v1.0.0-unsw-hybrid', 'TFLITE', 'models/reference/hybrid_model.tflite', 100.08, 0.9984, 0.9982, 'UNSW-NB15', 1, ?);
+                """, (now_ts,))
     finally:
         conn.close()
 
