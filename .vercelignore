@@ -15,6 +15,7 @@ __pycache__/
 
 # Heavy training datasets (keep only sample_flows.csv and pre-seeded SQLite db)
 data/UNSW_NB15_*.csv
+data/CICIDS2017_*.csv
 data/*.zip
 data/*.tar.gz
 
@@ -36,7 +37,10 @@ logs/
 
 # Local container & PaaS build metadata
 .dockerignore
+Dockerfile
+Dockerfile.vercel
 docker-compose.yml
 build.sh
 render.yaml
+
 
