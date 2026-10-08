@@ -350,9 +350,11 @@ def handle_404(e):
         "path": request.path,
         "full_path": request.full_path,
         "environ_path_info": request.environ.get("PATH_INFO"),
-        "environ_script_name": request.environ.get("SCRIPT_NAME"),
+        "headers": dict(request.headers),
+        "environ_keys": {k: v for k, v in request.environ.items() if isinstance(v, (str, int)) and any(p in k.lower() for p in ["path", "url", "uri", "match", "route", "orig"])},
         "routes": [str(rule) for rule in app.url_map.iter_rules()]
     }), 404
+
 
 
 @app.route("/health/")
