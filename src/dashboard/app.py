@@ -345,15 +345,10 @@ def validate_request_host():
 
 @app.errorhandler(404)
 def handle_404(e):
-    return jsonify({
-        "error": "Not Found",
-        "path": request.path,
-        "full_path": request.full_path,
-        "environ_path_info": request.environ.get("PATH_INFO"),
-        "headers": dict(request.headers),
-        "environ_keys": {k: v for k, v in request.environ.items() if isinstance(v, (str, int)) and any(p in k.lower() for p in ["path", "url", "uri", "match", "route", "orig"])},
-        "routes": [str(rule) for rule in app.url_map.iter_rules()]
-    }), 404
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Endpoint not found", "path": request.path}), 404
+    return render_template("index.html"), 404
+
 
 
 

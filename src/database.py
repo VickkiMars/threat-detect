@@ -7,7 +7,7 @@ import sqlite3
 import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
-from src.config import DB_PATH
+from src.config import DB_PATH, IS_SERVERLESS
 
 def get_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
     """Returns a tuned SQLite connection configured for concurrent edge operation."""
@@ -108,6 +108,9 @@ def init_db(db_path: Optional[Path] = None) -> None:
                     (model_id, version, model_format, file_path, file_size_kb, test_accuracy, test_macro_f1, dataset_origin, is_active, registered_at)
                     VALUES (1, 'v1.0.0-unsw-hybrid', 'TFLITE', 'models/reference/hybrid_model.tflite', 100.08, 0.9984, 0.9982, 'UNSW-NB15', 1, ?);
                 """, (now_ts,))
+
+            if IS_SERVERLESS:
+                conn.execute("UPDATE simulation_state SET is_running = 1 WHERE id = 1;")
     finally:
         conn.close()
 
