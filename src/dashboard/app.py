@@ -343,6 +343,18 @@ def validate_request_host():
             "message": "Invalid Host header. Add the hostname to GRACE_ALLOWED_HOSTS.",
         }), 400
 
+@app.errorhandler(404)
+def handle_404(e):
+    return jsonify({
+        "error": "Not Found",
+        "path": request.path,
+        "full_path": request.full_path,
+        "environ_path_info": request.environ.get("PATH_INFO"),
+        "environ_script_name": request.environ.get("SCRIPT_NAME"),
+        "routes": [str(rule) for rule in app.url_map.iter_rules()]
+    }), 404
+
+
 @app.route("/health/")
 @app.route("/health")
 def health_check():
