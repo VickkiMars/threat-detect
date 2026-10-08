@@ -44,6 +44,15 @@ def get_uptime_str() -> str:
     minutes, seconds = divmod(rem, 60)
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
+import logging
+
+logger = logging.getLogger("grace.dashboard")
+if not logger.handlers:
+    _handler = logging.StreamHandler(sys.stdout)
+    _handler.setFormatter(logging.Formatter("[%(asctime)s] [%(levelname)s] [GRACE] %(message)s", "%Y-%m-%d %H:%M:%S"))
+    logger.addHandler(_handler)
+    logger.setLevel(logging.INFO)
+
 class BackgroundSimulationManager:
     """Thread-safe simulation controller embedded within Flask backend."""
     
@@ -59,15 +68,25 @@ class BackgroundSimulationManager:
         self.alerts_generated = 0
         self.thread = None
         self.last_step_time = 0.0
+        self.last_error = None
         self._init_components()
 
     def _init_components(self):
         try:
+            logger.info("Initializing components. DB_PATH=%s, IS_SERVERLESS=%s, IS_CONTAINER=%s",
+                        DB_PATH, IS_SERVERLESS, IS_CONTAINER)
             init_db()
             active_rec = get_active_model()
             self.model_id = active_rec["model_id"] if active_rec else 1
+            logger.info("Active model: %s (model_id=%d)",
+                        active_rec["version"] if active_rec else "None (default=1)", self.model_id)
+
             if TFLITE_MODEL_PATH.exists():
                 self.engine = EdgeInferenceEngine(TFLITE_MODEL_PATH, num_threads=1)
+                logger.info("Loaded EdgeInferenceEngine from %s", TFLITE_MODEL_PATH)
+            else:
+                logger.error("TFLite model not found at: %s", TFLITE_MODEL_PATH)
+
             if SAMPLE_FLOWS_PATH.exists():
                 max_seq = get_max_window_sequence_id()
                 self.simulator = FlowStreamSimulator(
@@ -77,7 +96,12 @@ class BackgroundSimulationManager:
                 )
                 if max_seq > 0:
                     self.simulator.window_counter = max_seq
-                self.stream_generator = self.simulator.stream_windows()
+                self.stream_generator = self.simulator.stream_windows(with_delay=False)
+                logger.info("Loaded FlowStreamSimulator from %s (resuming at window #%d)",
+                            SAMPLE_FLOWS_PATH, max_seq)
+            else:
+                logger.error("Sample flows CSV not found at: %s", SAMPLE_FLOWS_PATH)
+
             self.telemetry = TelemetrySampler()
 
             # Synchronize state from database
@@ -86,25 +110,32 @@ class BackgroundSimulationManager:
             self.windows_processed = state.get("windows_processed", 0)
             self.alerts_generated = state.get("alerts_generated", 0)
             self.last_step_time = state.get("last_step_time", 0.0)
+            logger.info("Simulation state loaded: running=%s, processed=%d, alerts=%d",
+                        self.running, self.windows_processed, self.alerts_generated)
 
             # Start background thread unless explicitly disabled.
-            # DISABLE_EMBEDDED_THREADING is set in docker-compose when a
-            # standalone inference worker runs alongside the dashboard to
-            # prevent double-consumption of the flow stream.
-            # On Vercel (single-container, no worker sidecar) threading runs.
             threading_enabled = not (IS_SERVERLESS or DISABLE_EMBEDDED_THREADING)
             if self.running and threading_enabled:
                 self.thread = threading.Thread(target=self._run_loop, daemon=True)
                 self.thread.start()
+                logger.info("Started background simulation thread.")
+            else:
+                logger.info("Background thread disabled (IS_SERVERLESS=%s, DISABLE_EMBEDDED_THREADING=%s). Request-driven stepping active.",
+                            IS_SERVERLESS, DISABLE_EMBEDDED_THREADING)
         except Exception as e:
-            print(f"[SimManager] Initialization notice: {e}")
+            self.last_error = str(e)
+            logger.exception("[SimManager] Initialization error: %s", e)
 
     def step(self, count: int = 1):
         """Advances stream replay by count windows and persists results immediately."""
         with self.lock:
             if not self.engine or not self.simulator or not self.stream_generator:
+                logger.info("[SimManager] Components incomplete before step() - re-initializing...")
                 self._init_components()
             if not self.engine or not self.simulator or not self.stream_generator:
+                err_msg = f"Incomplete components: engine={bool(self.engine)}, sim={bool(self.simulator)}, gen={bool(self.stream_generator)}"
+                self.last_error = err_msg
+                logger.error("[SimManager] Step aborted: %s", err_msg)
                 return []
             
             new_flow_ids = []
@@ -113,37 +144,49 @@ class BackgroundSimulationManager:
                     window_id, sequence_tensor, metadata = next(self.stream_generator)
                 except StopIteration:
                     if self.simulator and self.simulator.loop:
-                        self.stream_generator = self.simulator.stream_windows()
+                        self.stream_generator = self.simulator.stream_windows(with_delay=False)
                         window_id, sequence_tensor, metadata = next(self.stream_generator)
                     else:
+                        logger.info("[SimManager] Stream completed without loop")
                         break
+                except Exception as stream_err:
+                    self.last_error = f"Generator next() error: {stream_err}"
+                    logger.exception("[SimManager] Generator error: %s", stream_err)
+                    break
                 
-                pred_class, confidence, latency_ms = self.engine.predict_window(sequence_tensor)
-                self.windows_processed += 1
-                
-                flow_id = log_detection(
-                    model_id=self.model_id,
-                    src_ip=metadata["src_ip"],
-                    dst_ip=metadata["dst_ip"],
-                    protocol=metadata["protocol"],
-                    predicted_class=pred_class,
-                    confidence=confidence,
-                    window_sequence_id=window_id,
-                    latency_ms=latency_ms
-                )
-                
-                if pred_class == 1:
-                    handle_malicious_detection(
-                        flow_id=flow_id,
-                        confidence=confidence,
+                try:
+                    pred_class, confidence, latency_ms = self.engine.predict_window(sequence_tensor)
+                    self.windows_processed += 1
+                    
+                    flow_id = log_detection(
+                        model_id=self.model_id,
                         src_ip=metadata["src_ip"],
                         dst_ip=metadata["dst_ip"],
                         protocol=metadata["protocol"],
-                        window_id=window_id
+                        predicted_class=pred_class,
+                        confidence=confidence,
+                        window_sequence_id=window_id,
+                        latency_ms=latency_ms
                     )
-                    self.alerts_generated += 1
                     
-                new_flow_ids.append(flow_id)
+                    if pred_class == 1:
+                        handle_malicious_detection(
+                            flow_id=flow_id,
+                            confidence=confidence,
+                            src_ip=metadata["src_ip"],
+                            dst_ip=metadata["dst_ip"],
+                            protocol=metadata["protocol"],
+                            window_id=window_id
+                        )
+                        self.alerts_generated += 1
+                        
+                    new_flow_ids.append(flow_id)
+                    logger.info("[Step] Window #%d -> %s (conf=%.4f, lat=%.3fms) logged flow_id=%s",
+                                window_id, "MALICIOUS" if pred_class == 1 else "BENIGN", confidence, latency_ms, flow_id)
+                except Exception as step_err:
+                    self.last_error = f"Inference/logging error: {step_err}"
+                    logger.exception("[SimManager] Error predicting/logging window #%s: %s", window_id, step_err)
+                    break
 
             now = time.time()
             self.last_step_time = now
@@ -439,12 +482,67 @@ def api_recent_detections():
         thread_inactive = sim_manager.thread is None or not sim_manager.thread.is_alive()
         if IS_SERVERLESS or (DISABLE_EMBEDDED_THREADING and thread_inactive):
             try:
-                sim_manager.step(count=1)
+                new_ids = sim_manager.step(count=1)
+                logger.info("[API] Stepped simulation on demand. New flow IDs: %s", new_ids)
             except Exception as e:
-                print(f"[API] Simulation step notice: {e}")
+                logger.exception("[API] Simulation step error: %s", e)
 
     limit = min(int(request.args.get("limit", 50)), 100)
-    return jsonify({"detections": get_recent_detections(limit=limit)})
+    detections = get_recent_detections(limit=limit)
+    if not detections:
+        logger.warning("[API] 0 detections returned from DB (%s). Last error: %s", DB_PATH, sim_manager.last_error)
+    return jsonify({"detections": detections})
+
+@app.route("/api/debug")
+def api_debug():
+    """Returns operational diagnostics and component status for troubleshooting."""
+    import sqlite3 as _sqlite3
+    db_counts = {}
+    try:
+        conn = _sqlite3.connect(str(DB_PATH), timeout=3.0)
+        try:
+            db_counts["detection_log"] = conn.execute("SELECT COUNT(*) FROM detection_log;").fetchone()[0]
+            db_counts["alert"] = conn.execute("SELECT COUNT(*) FROM alert;").fetchone()[0]
+            db_counts["model_registry"] = conn.execute("SELECT COUNT(*) FROM model_registry;").fetchone()[0]
+            db_counts["system_metrics"] = conn.execute("SELECT COUNT(*) FROM system_metrics;").fetchone()[0]
+        finally:
+            conn.close()
+    except Exception as exc:
+        db_counts["error"] = str(exc)
+
+    return jsonify({
+        "environment": {
+            "is_serverless": IS_SERVERLESS,
+            "is_container": IS_CONTAINER,
+            "disable_threading": DISABLE_EMBEDDED_THREADING,
+            "server_start_time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(SERVER_START_TIME)),
+            "uptime": get_uptime_str(),
+        },
+        "storage": {
+            "db_path": str(DB_PATH),
+            "db_exists": DB_PATH.exists(),
+            "db_size_bytes": DB_PATH.stat().st_size if DB_PATH.exists() else 0,
+            "counts": db_counts,
+        },
+        "artifacts": {
+            "tflite_model_path": str(TFLITE_MODEL_PATH),
+            "tflite_model_exists": TFLITE_MODEL_PATH.exists(),
+            "tflite_model_size_kb": round(TFLITE_MODEL_PATH.stat().st_size / 1024.0, 2) if TFLITE_MODEL_PATH.exists() else 0,
+            "sample_flows_path": str(SAMPLE_FLOWS_PATH),
+            "sample_flows_exists": SAMPLE_FLOWS_PATH.exists(),
+        },
+        "simulation_engine": {
+            "running": sim_manager.running,
+            "windows_processed": sim_manager.windows_processed,
+            "alerts_generated": sim_manager.alerts_generated,
+            "engine_loaded": sim_manager.engine is not None,
+            "simulator_loaded": sim_manager.simulator is not None,
+            "generator_loaded": sim_manager.stream_generator is not None,
+            "thread_alive": sim_manager.thread.is_alive() if sim_manager.thread else False,
+            "last_step_error": sim_manager.last_error,
+        },
+        "recent_detections_sample": get_recent_detections(limit=3),
+    })
 
 @app.route("/api/alerts/unacknowledged")
 def api_unacknowledged_alerts():

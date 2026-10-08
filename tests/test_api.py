@@ -126,3 +126,13 @@ def test_api_alert_history(client):
     alerts = res.get_json()["alerts"]
     assert any(a["alert_id"] == alert_id for a in alerts)
 
+def test_api_debug_diagnostics(client):
+    res = client.get("/api/debug")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert "environment" in data
+    assert "storage" in data
+    assert "artifacts" in data
+    assert "simulation_engine" in data
+    assert data["storage"]["db_exists"] is True
+

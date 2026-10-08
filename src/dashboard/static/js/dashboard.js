@@ -263,6 +263,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (elConnDot) elConnDot.className = "size-2 rounded-full bg-sky-500 animate-pulse";
       if (elConnText) elConnText.textContent = "Perimeter Online";
 
+      console.log(`[GRACE SecOps] Status synced: flows=${data.total_flows_processed}, threats=${data.malicious_threats}, sim_running=${data.simulation?.running}, uptime=${data.uptime}`);
+
       // Uptime
       if (elHeaderUptime && data.uptime) {
         elHeaderUptime.textContent = data.uptime;
@@ -460,6 +462,11 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       const data = await res.json();
       const detections = data.detections || [];
+
+      console.log(`[GRACE SecOps] /api/detections/recent returned ${detections.length} detections (cached: ${knownDetections.size}, lastFlowId: ${lastFlowId})`);
+      if (detections.length === 0 && knownDetections.size === 0) {
+        console.warn("[GRACE SecOps] No detections returned from API. Open /api/debug to inspect database & engine diagnostics.");
+      }
 
       // Merge API results into knownDetections (skip legacy seq #1001)
       let hasNew = false;

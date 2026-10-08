@@ -4,7 +4,16 @@ Defines paths, resource ceilings, model hyperparameters, and severity brackets.
 """
 
 import os
+import sys
+import logging
 from pathlib import Path
+
+logger = logging.getLogger("grace.config")
+if not logger.handlers:
+    _handler = logging.StreamHandler(sys.stdout)
+    _handler.setFormatter(logging.Formatter("[%(asctime)s] [%(levelname)s] [GRACE] %(message)s", "%Y-%m-%d %H:%M:%S"))
+    logger.addHandler(_handler)
+    logger.setLevel(logging.INFO)
 
 # Serverless Execution Detection (Vercel / AWS Lambda)
 IS_SERVERLESS = bool(
@@ -33,11 +42,20 @@ if IS_SERVERLESS and not IS_CONTAINER:
         try:
             import shutil
             shutil.copy2(SEED_DB, DB_PATH)
+            logger.info("Successfully bootstrapped seed SQLite DB from %s to %s (%d bytes)",
+                        SEED_DB, DB_PATH, DB_PATH.stat().st_size)
         except Exception as e:
-            print(f"[GRACE Config] Notice copying seed DB to /tmp: {e}")
+            logger.error("Failed copying seed DB to /tmp: %s", e)
+    elif DB_PATH.exists():
+        logger.info("Using existing /tmp database at %s (%d bytes)", DB_PATH, DB_PATH.stat().st_size)
+    else:
+        logger.warning("No seed database found at %s to bootstrap /tmp", SEED_DB)
 else:
     LOGS_DIR = PROJECT_ROOT / "logs"
     DB_PATH = DATA_DIR / "threat_detection.db"
+
+logger.info("GRACE Config initialized: IS_SERVERLESS=%s, IS_CONTAINER=%s, DB_PATH=%s",
+            IS_SERVERLESS, IS_CONTAINER, DB_PATH)
 
 
 SAMPLE_FLOWS_PATH = DATA_DIR / "sample_flows.csv"
