@@ -37,9 +37,13 @@ class FlowStreamSimulator:
         if len(self.df) < self.window_size:
             raise ValueError(f"Dataset has {len(self.df)} rows, minimum required is {self.window_size}")
             
-    def stream_windows(self) -> Generator[Tuple[int, np.ndarray, Dict[str, Any]], None, None]:
+    def stream_windows(self, with_delay: bool = False) -> Generator[Tuple[int, np.ndarray, Dict[str, Any]], None, None]:
         """
         Yields sequential 10-flow windows with transformed feature tensors and stream metadata.
+        
+        Args:
+            with_delay: When True, sleeps delay_per_window between yields (for standalone loops).
+                        When False, yields immediately (for on-demand request stepping).
         
         Yields:
             Tuple: (window_id, sequence_tensor of shape (1, 10, PCA_COMPONENTS), metadata_dict)
@@ -102,7 +106,7 @@ class FlowStreamSimulator:
             window_id += 1
             
             # Rate-limiting sleep to simulate arrival rate
-            if delay_per_window > 0:
+            if with_delay and delay_per_window > 0:
                 time.sleep(delay_per_window)
 
 def main():
