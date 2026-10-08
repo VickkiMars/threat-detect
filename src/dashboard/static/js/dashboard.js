@@ -550,8 +550,12 @@ document.addEventListener("DOMContentLoaded", () => {
   fetchAlerts();
   fetchRecentDetections();
 
-  // Polling loop every 1.5 seconds
-  setInterval(() => {
+  // Adaptive polling loop: 3.0s interval, pauses when tab is hidden (saves CPU & Vercel Fluid compute)
+  let pollTimer = null;
+  const POLL_INTERVAL_MS = 3000;
+
+  function runPoll() {
+    if (document.hidden) return;
     fetchSummary();
     if (activeAlertTab === "active") {
       fetchAlerts();
@@ -559,7 +563,31 @@ document.addEventListener("DOMContentLoaded", () => {
       fetchAlertHistory();
     }
     fetchRecentDetections();
-  }, 1500);
+  }
+
+  function startPolling() {
+    if (!pollTimer) {
+      pollTimer = setInterval(runPoll, POLL_INTERVAL_MS);
+    }
+  }
+
+  function stopPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      stopPolling();
+    } else {
+      runPoll();
+      startPolling();
+    }
+  });
+
+  startPolling();
 });
 
 
