@@ -24,8 +24,11 @@ fi
 
 echo ""
 echo "=== [3/4] Installing Required Dependencies ==="
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install -r requirements.txt
+if [ -f "requirements-dev.txt" ]; then
+    .venv/bin/pip install -r requirements-dev.txt
+else
+    .venv/bin/pip install -r requirements.txt
+fi
 
 echo ""
 echo "=== [4/4] Verifying Core Package Imports ==="

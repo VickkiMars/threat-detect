@@ -1,0 +1,13 @@
+# ==============================================================================
+# GRACE AI Threat Detection System - Development & Model Training Requirements
+# ==============================================================================
+
+-r requirements.txt
+
+# Deep Learning Framework — training + TFLite conversion (dissertation Table 4.1)
+# tensorflow-cpu targets CPU-only, GPU-free edge deployment (NFR5).
+tensorflow-cpu>=2.16.0
+keras>=3.0.0
+
+# Testing & Quality Assurance
+pytest>=7.4.0

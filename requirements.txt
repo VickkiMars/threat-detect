@@ -1,15 +1,12 @@
-# Deep Learning Framework — training + TFLite conversion (dissertation Table 4.1)
-# tensorflow-cpu targets CPU-only, GPU-free edge deployment (NFR5). The full
-# `tensorflow` package additionally pulls large NVIDIA CUDA wheels, which are
-# unsuitable for a Raspberry Pi-class deployment target.
-tensorflow-cpu>=2.16.0
-keras>=3.0.0
+# ==============================================================================
+# GRACE AI Threat Detection System - Production & Deployment Requirements
+# ==============================================================================
 
 # Edge Inference Runtime — deployment only
 # The exported .tflite contains built-in operators only, so this standalone
 # interpreter executes it bit-identically at ~48 MB RSS, versus the ~549 MB
 # required merely to import TensorFlow. This is what satisfies the 512 MB NFR3
-# ceiling; TensorFlow remains installed purely as the build-time dependency.
+# ceiling; TensorFlow remains installed purely as the offline build/training dependency.
 ai-edge-litert>=2.2.0
 
 # Numerical & Scientific Computing
@@ -29,6 +26,3 @@ gunicorn>=21.2.0
 
 # System Telemetry & Hardware Profiling
 psutil>=5.9.0
-
-# Testing & Quality Assurance
-pytest>=7.4.0
